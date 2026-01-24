@@ -247,7 +247,6 @@ func installYggdrasil() {
 			fmt.Println(green("Config generated at " + detectedConfigPath))
 		} else {
 			fmt.Println(red("Failed to generate config automatically. Check if Yggdrasil is in PATH."))
-			// If generation fails (e.g. permission), try creating a basic file
 		}
 	}
 	waitEnter()
@@ -255,13 +254,26 @@ func installYggdrasil() {
 
 func installWindows() error {
 	fmt.Println("Fetching latest release...")
-	url, err := getLatestReleaseURL("yggdrasil-go", ".msi")
+
+	// Determine Architecture for Windows (x64 or 32-bit, arm is rare but possible)
+	// runtime.GOARCH usually returns "amd64", "386", "arm64"
+	arch := runtime.GOARCH
+	var searchStr string
+	if arch == "amd64" {
+		searchStr = "x64" // GitHub releases often use 'x64' for Windows
+	} else if arch == "386" {
+		searchStr = "x86" // or 32-bit
+	} else {
+		searchStr = arch
+	}
+
+	url, err := getLatestReleaseURL("yggdrasil-go", ".msi", searchStr)
 	if err != nil {
 		return err
 	}
 
 	filename := "yggdrasil_installer.msi"
-	fmt.Printf("Downloading %s...\n", url)
+	fmt.Printf("Downloading %s (Arch: %s)...\n", url, arch)
 	if err := downloadFile(filename, url); err != nil {
 		return err
 	}
@@ -280,9 +292,36 @@ func installWindows() error {
 }
 
 func installLinux() error {
-	distro := getLinuxDistro()
-	// Simple check for Debian-based
-	if strings.Contains(distro, "debian") || strings.Contains(distro, "ubuntu") || strings.Contains(distro, "mint") || strings.Contains(distro, "kali") || strings.Contains(distro, "pop") {
+	distroID, distroLike := getLinuxDistroInfo()
+	fmt.Printf("Detected Distro: %s (Like: %s)\n", distroID, distroLike)
+
+	// --- Detection Logic ---
+
+	// Check if Debian/Ubuntu based
+	isDebian := strings.Contains(distroID, "debian") || strings.Contains(distroID, "ubuntu") ||
+	strings.Contains(distroID, "mint") || strings.Contains(distroID, "kali") ||
+	strings.Contains(distroID, "pop") || strings.Contains(distroLike, "debian") ||
+	strings.Contains(distroLike, "ubuntu")
+
+	// Check if Arch based
+	isArch := strings.Contains(distroID, "arch") || strings.Contains(distroID, "manjaro") ||
+	strings.Contains(distroID, "cachyos") || strings.Contains(distroID, "endeavour") ||
+	strings.Contains(distroLike, "arch")
+
+	// Check if Fedora/RHEL based
+	isFedora := strings.Contains(distroID, "fedora") || strings.Contains(distroID, "rhel") ||
+	strings.Contains(distroID, "centos") || strings.Contains(distroID, "almalinux") ||
+	strings.Contains(distroID, "rocky") || strings.Contains(distroLike, "fedora")
+
+	// Check if Void Linux
+	isVoid := strings.Contains(distroID, "void")
+
+	// Check if Alpine Linux
+	isAlpine := strings.Contains(distroID, "alpine")
+
+	// --- Installation Logic ---
+
+	if isDebian {
 		choice := ""
 		survey.AskOne(&survey.Select{
 			Message: "Installation Method:",
@@ -290,15 +329,27 @@ func installLinux() error {
 		}, &choice)
 
 		if choice == "Download .deb" {
-			url, err := getLatestReleaseURL("yggdrasil-go", ".deb")
+			arch := runtime.GOARCH
+			// Adjust arch string if necessary for .deb naming conventions
+			if arch == "arm64" {
+				// usually matches, but good to keep in mind
+			}
+
+			url, err := getLatestReleaseURL("yggdrasil-go", ".deb", arch)
 			if err != nil {
 				return err
 			}
+
+			fmt.Printf("Downloading %s...\n", url)
 			if err := downloadFile("ygg.deb", url); err != nil {
 				return err
 			}
 			defer os.Remove("ygg.deb")
-			return exec.Command("apt", "install", "./ygg.deb", "-y").Run()
+
+			cmd := exec.Command("apt", "install", "./ygg.deb", "-y")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
 		} else {
 			// APT logic
 			cmds := [][]string{
@@ -307,19 +358,85 @@ func installLinux() error {
 				{"apt", "update"},
 				{"apt", "install", "yggdrasil", "-y"},
 			}
-			for _, c := range cmds {
-				fmt.Printf("Running: %s\n", strings.Join(c, " "))
-				if err := exec.Command(c[0], c[1:]...).Run(); err != nil {
-					return fmt.Errorf("step failed: %v", err)
-				}
-			}
-			return nil
+			return runCommands(cmds)
 		}
-	} else if strings.Contains(distro, "arch") || strings.Contains(distro, "manjaro") {
-		return exec.Command("pacman", "-S", "yggdrasil-go", "--noconfirm").Run()
+
+	} else if isFedora {
+		// Fedora uses COPR for Yggdrasil
+		fmt.Println("Detected Fedora-based system. Using DNF and COPR...")
+
+		// Ensure dnf-plugins-core is installed to use 'copr' command
+		// Note: On newer Fedora versions, this is often built-in or named 'dnf-command(copr)'
+		cmds := [][]string{
+			{"dnf", "install", "dnf-plugins-core", "-y"},
+			{"dnf", "copr", "enable", "neilalexander/yggdrasil", "-y"},
+			{"dnf", "install", "yggdrasil", "-y"},
+		}
+		return runCommands(cmds)
+
+	} else if isVoid {
+		// Void Linux logic (xbps)
+		fmt.Println("Detected Void Linux. Using xbps-install...")
+
+		// -S to sync repo index, -y for auto yes
+		cmd := exec.Command("xbps-install", "-S", "yggdrasil", "-y")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("xbps-install failed: %v", err)
+		}
+		fmt.Println("Installed successfully via XBPS.")
+		return nil
+
+	} else if isAlpine {
+		// Alpine Linux logic (apk)
+		fmt.Println("Detected Alpine Linux. Using apk...")
+
+		// Assuming yggdrasil is available in community/testing repos enabled by user
+		cmd := exec.Command("apk", "add", "yggdrasil")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("apk failed: %v", err)
+		}
+		fmt.Println("Installed successfully via APK.")
+		return nil
+
+	} else if isArch {
+		// Arch / CachyOS logic
+		fmt.Println("Detected Arch-based system. Attempting to install via pacman...")
+		pkgs := []string{"yggdrasil-go", "yggdrasil"}
+		for _, pkg := range pkgs {
+			fmt.Printf("Trying package: %s\n", pkg)
+			cmd := exec.Command("pacman", "-S", pkg, "--noconfirm")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			if err == nil {
+				fmt.Println("Installed successfully.")
+				return nil
+			}
+			fmt.Printf("Failed to install %s. Trying next...\n", pkg)
+		}
+		return fmt.Errorf("could not install yggdrasil via pacman. Try installing manually from AUR")
 	}
 
-	return fmt.Errorf("unsupported distribution: %s", distro)
+	return fmt.Errorf("unsupported distribution: %s", distroID)
+}
+
+// Helper function to keep code clean (used in Debian/Fedora blocks)
+
+func runCommands(cmds [][]string) error {
+	for _, c := range cmds {
+		fmt.Printf("Running: %s\n", strings.Join(c, " "))
+		cmd := exec.Command(c[0], c[1:]...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("step failed (%s): %v", c[0], err)
+		}
+	}
+	return nil
 }
 
 // --- Logic: GitHub & Peers ---
@@ -686,19 +803,29 @@ func checkAdmin() {
 		fmt.Println(red("Root required! (sudo)"))
 		os.Exit(1)
 	}
-	// On Windows, checking admin is harder in Go without CGO,
-	// typically we rely on the user running terminal as admin.
 }
 
-func getLinuxDistro() string {
-	b, err := os.ReadFile("/etc/os-release")
+func getLinuxDistroInfo() (id string, like string) {
+	f, err := os.Open("/etc/os-release")
 	if err != nil {
-		return "unknown"
+		return "unknown", ""
 	}
-	return strings.ToLower(string(b))
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "ID=") {
+			id = strings.Trim(strings.TrimPrefix(line, "ID="), "\"")
+		}
+		if strings.HasPrefix(line, "ID_LIKE=") {
+			like = strings.Trim(strings.TrimPrefix(line, "ID_LIKE="), "\"")
+		}
+	}
+	return strings.ToLower(id), strings.ToLower(like)
 }
 
-func getLatestReleaseURL(repo, suffix string) (string, error) {
+func getLatestReleaseURL(repo, suffix, archFilter string) (string, error) {
 	resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner, repo))
 	if err != nil {
 		return "", err
@@ -721,13 +848,19 @@ func getLatestReleaseURL(repo, suffix string) (string, error) {
 
 	for _, a := range assets {
 		m := a.(map[string]interface{})
-		if name, ok := m["name"].(string); ok && strings.HasSuffix(name, suffix) {
-			if url, ok := m["browser_download_url"].(string); ok {
-				return url, nil
+		name, nameOk := m["name"].(string)
+		url, urlOk := m["browser_download_url"].(string)
+
+		if nameOk && urlOk && strings.HasSuffix(name, suffix) {
+			// Apply Architecture Filter
+			// If archFilter is empty, accept any. If not empty, filename must contain it.
+			if archFilter != "" && !strings.Contains(strings.ToLower(name), strings.ToLower(archFilter)) {
+				continue
 			}
+			return url, nil
 		}
 	}
-	return "", fmt.Errorf("release not found")
+	return "", fmt.Errorf("release not found for arch: %s", archFilter)
 }
 
 func downloadFile(path, url string) error {
@@ -773,7 +906,7 @@ func clearScreen() {
 
 func printBanner() {
 	fmt.Println(cyan(`
-	__  __           _
+	__   __           _
 	\ \ / /          | |
 	 \ V / __ _  __ _| |     __ _ _____   _
 	  \ / / _' |/ _' | |    / _' |_  / | | |
@@ -781,6 +914,6 @@ func printBanner() {
 	  \_/ \__, |\__, |______\__,_/___|\__, |
 	       __/ | __/ |                 __/ |
 	      |___/ |___/                 |___/
-	           Configurator v0.1.2
+	          Configurator v0.1.3
 	`))
 }
