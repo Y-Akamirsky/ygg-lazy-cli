@@ -62,10 +62,12 @@ type Peer struct {
 // --- Main ---
 
 func main() {
+	// 1. Check/Request Admin Privileges immediately
+	ensureAdmin()
+
 	installFlag := flag.Bool("ygginstall", false, "Install Yggdrasil automatically")
 	flag.Parse()
 
-	checkAdmin()
 	detectedConfigPath = findConfigPath()
 
 	// Handle Install Flag
@@ -91,35 +93,70 @@ func main() {
 	mainMenu()
 }
 
+// --- Admin & Path Helpers ---
+
+func ensureAdmin() {
+	if isWindows {
+		if !amAdminWindows() {
+			fmt.Println(yellow("Administrator privileges required. Relaunching..."))
+			runMeElevated()
+		}
+	} else {
+		if os.Geteuid() != 0 {
+			fmt.Println(red("Root required! Please run with sudo."))
+			os.Exit(1)
+		}
+	}
+}
+
+func amAdminWindows() bool {
+	// "net session" requires admin. If it fails (exit code != 0), we are not admin.
+	_, err := exec.Command("net", "session").Output()
+	return err == nil
+}
+
+func runMeElevated() {
+	exe, _ := os.Executable()
+	cwd, _ := os.Getwd()
+	// Reconstruct args
+	args := strings.Join(os.Args[1:], " ")
+
+	// Use PowerShell Start-Process -Verb RunAs to trigger UAC
+	cmd := exec.Command("powershell", "Start-Process",
+			    "-FilePath", fmt.Sprintf("'%s'", exe),
+			    "-ArgumentList", fmt.Sprintf("'%s'", args),
+			    "-Verb", "RunAs",
+		     "-WorkingDirectory", fmt.Sprintf("'%s'", cwd))
+
+	err := cmd.Start()
+	if err != nil {
+		fmt.Println(red("Failed to elevate: "), err)
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
 func findConfigPath() string {
 	if isWindows {
-		// Windows: Check distinct locations
 		paths := []string{
 			`C:\ProgramData\Yggdrasil\yggdrasil.conf`,
 			`C:\Program Files\Yggdrasil\yggdrasil.conf`,
 		}
 		for _, p := range paths {
-			if fileExists(p) {
-				return p
-			}
+			if fileExists(p) { return p }
 		}
-		return `C:\ProgramData\Yggdrasil\yggdrasil.conf` // Default fallback
+		return `C:\ProgramData\Yggdrasil\yggdrasil.conf`
 	}
 
-	// Linux
 	paths := []string{
 		"/etc/yggdrasil.conf",
 		"/etc/yggdrasil/yggdrasil.conf",
 		"/etc/Yggdrasil/yggdrasil.conf",
 	}
-
 	for _, p := range paths {
-		if fileExists(p) {
-			return p
-		}
+		if fileExists(p) { return p }
 	}
-
-	return "/etc/yggdrasil.conf" // Default fallback
+	return "/etc/yggdrasil.conf"
 }
 
 // --- Menus ---
@@ -189,7 +226,6 @@ func serviceMenu() {
 		if err == terminal.InterruptErr || action == "Back" {
 			return
 		}
-
 		manageService(action)
 		waitEnter()
 	}
@@ -229,7 +265,6 @@ func installYggdrasil() {
 		}
 	}
 
-	// Generate config if missing
 	detectedConfigPath = findConfigPath()
 	if !fileExists(detectedConfigPath) {
 		fmt.Println("Generating config...")
@@ -255,14 +290,13 @@ func installYggdrasil() {
 func installWindows() error {
 	fmt.Println("Fetching latest release...")
 
-	// Determine Architecture for Windows (x64 or 32-bit, arm is rare but possible)
-	// runtime.GOARCH usually returns "amd64", "386", "arm64"
+	// Determine Architecture for Windows
 	arch := runtime.GOARCH
 	var searchStr string
 	if arch == "amd64" {
-		searchStr = "x64" // GitHub releases often use 'x64' for Windows
+		searchStr = "x64"
 	} else if arch == "386" {
-		searchStr = "x86" // or 32-bit
+		searchStr = "x86"
 	} else {
 		searchStr = arch
 	}
@@ -278,8 +312,9 @@ func installWindows() error {
 		return err
 	}
 
-	fmt.Println("Running MSI installer...")
-	cmd := exec.Command("msiexec", "/i", filename, "/quiet", "/norestart")
+	fmt.Println("Running MSI installer (Admin rights required)...")
+	// Using /norestart /qn for silent install, or /qb for basic UI
+	cmd := exec.Command("msiexec", "/i", filename, "/qb", "/norestart")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -444,29 +479,17 @@ func runCommands(cmds [][]string) error {
 func fetchPeersStructure() (map[string][]string, error) {
 	fmt.Println("Scanning repository...")
 	resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/git/trees/master?recursive=1", repoOwner, repoPeers))
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 	defer resp.Body.Close()
 
 	var treeResp GitTreeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
-		return nil, err
-	}
+	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil { return nil, err }
 
 	regionMap := make(map[string][]string)
 	for _, node := range treeResp.Tree {
-		if node.Type != "blob" || !strings.HasSuffix(node.Path, ".md") {
-			continue
-		}
-		if strings.HasSuffix(node.Path, "README.md") {
-			continue
-		}
-
+		if node.Type != "blob" || !strings.HasSuffix(node.Path, ".md") || strings.HasSuffix(node.Path, "README.md") { continue }
 		parts := strings.Split(node.Path, "/")
-		if len(parts) < 2 {
-			continue
-		}
+		if len(parts) < 2 { continue }
 		region := parts[0]
 		rawUrl := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/master/%s", repoOwner, repoPeers, node.Path)
 		regionMap[region] = append(regionMap[region], rawUrl)
@@ -525,9 +548,7 @@ func autoAddPeers() {
 	}
 
 	limit := 25
-	if len(allPeers) < limit {
-		limit = len(allPeers)
-	}
+	if len(allPeers) < limit { limit = len(allPeers) }
 
 	var ranked []Peer
 	for _, uri := range allPeers[:limit] {
@@ -538,7 +559,6 @@ func autoAddPeers() {
 		}
 	}
 	fmt.Println()
-
 	sort.Slice(ranked, func(i, j int) bool { return ranked[i].Latency < ranked[j].Latency })
 
 	if len(ranked) == 0 {
@@ -549,9 +569,7 @@ func autoAddPeers() {
 
 	toAdd := []string{}
 	count := 3
-	if len(ranked) < count {
-		count = len(ranked)
-	}
+	if len(ranked) < count { count = len(ranked) }
 
 	fmt.Println(green("Best Peers:"))
 	for i := 0; i < count; i++ {
@@ -571,22 +589,15 @@ func manualAddPeers() {
 	for {
 		clearScreen()
 		regionMap, err := fetchPeersStructure()
-		if err != nil {
-			return
-		}
-
+		if err != nil { return }
 		keys := []string{}
-		for k := range regionMap {
-			keys = append(keys, k)
-		}
+		for k := range regionMap { keys = append(keys, k) }
 		sort.Strings(keys)
 		keys = append(keys, "Back")
 
 		selReg := ""
 		err = survey.AskOne(&survey.Select{Message: "Region:", Options: keys}, &selReg)
-		if err == terminal.InterruptErr || selReg == "Back" {
-			return
-		}
+		if err == terminal.InterruptErr || selReg == "Back" { return }
 
 		peers := fetchPeersFromURLs(regionMap[selReg])
 		if len(peers) == 0 {
@@ -594,7 +605,6 @@ func manualAddPeers() {
 			waitEnter()
 			continue
 		}
-
 		selPeers := []string{}
 		err = survey.AskOne(&survey.MultiSelect{Message: "Select Peers:", Options: peers}, &selPeers)
 		if err == nil && len(selPeers) > 0 {
@@ -611,7 +621,6 @@ func removePeersMenu() {
 		waitEnter()
 		return
 	}
-
 	toRemove := []string{}
 	err := survey.AskOne(&survey.MultiSelect{Message: "Select to Remove:", Options: current}, &toRemove)
 	if err == nil && len(toRemove) > 0 {
@@ -629,42 +638,24 @@ func addCustomPeer() {
 	}
 }
 
-// --- Logic: Parser V3 (Block Extractor) ---
+// --- Logic: Config Writer V4 (Clean formatting) ---
 
 func getConfigPeers() []string {
 	contentBytes, err := os.ReadFile(detectedConfigPath)
-	if err != nil {
-		return []string{}
-	}
+	if err != nil { return []string{} }
 	content := string(contentBytes)
 	var peers []string
 
-	// Find the "Peers: [" block
 	startIdx := strings.Index(content, "Peers: [")
-	if startIdx == -1 {
-		return peers
-	}
-
-	// Find the closing bracket ']' AFTER the start
+	if startIdx == -1 { return peers }
 	endIdx := strings.Index(content[startIdx:], "]")
-	if endIdx == -1 {
-		return peers
-	}
-	endIdx += startIdx // Adjust relative index to absolute
+	if endIdx == -1 { return peers }
+	endIdx += startIdx
 
-	// Extract the block content
 	block := content[startIdx:endIdx]
-
-	// Regex to find URIs inside this block.
-	// Matches: tcp://..., quic://...
-	// Ignores quotes, commas, and whitespace around them.
 	re := regexp.MustCompile(`(tcp|tls|quic|ws|wss)://[a-zA-Z0-9\.\-\:\[\]]+`)
 	matches := re.FindAllString(block, -1)
-
-	if matches != nil {
-		peers = append(peers, matches...)
-	}
-
+	if matches != nil { peers = append(peers, matches...) }
 	return peers
 }
 
@@ -673,73 +664,86 @@ func addPeersToConfig(newPeers []string) {
 	if err != nil { return }
 	content := string(contentBytes)
 
-	// Filter duplicates
-	uniquePeers := []string{}
+	// Combine existing peers + new peers
+	existing := getConfigPeers()
+	finalList := existing
 	for _, p := range newPeers {
-		if !strings.Contains(content, p) {
-			uniquePeers = append(uniquePeers, p)
+		isDup := false
+		for _, e := range existing {
+			if e == p { isDup = true; break }
+		}
+		if !isDup { finalList = append(finalList, p) }
+	}
+
+	// Rebuild the "Peers: [...]" block entirely
+	newBlock := "Peers: ["
+	for _, p := range finalList {
+		newBlock += fmt.Sprintf("\n  %s", p) // Indent 2 spaces
+	}
+	newBlock += "\n]"
+
+	// Inject into file
+	startIdx := strings.Index(content, "Peers: [")
+	if startIdx != -1 {
+		// Found existing block, replace it
+		endIdx := strings.Index(content[startIdx:], "]")
+		if endIdx != -1 {
+			endIdx += startIdx + 1 // Include the ']'
+			newContent := content[:startIdx] + newBlock + content[endIdx:]
+			os.WriteFile(detectedConfigPath, []byte(newContent), 0644)
+			fmt.Println(green("Peers added and config formatted."))
+			return
 		}
 	}
 
-	if len(uniquePeers) == 0 { return }
-
-	// Locate "Peers: ["
-	searchStr := "Peers: ["
-	idx := strings.Index(content, searchStr)
-
-	if idx != -1 {
-		// Insert AFTER "Peers: ["
-		insertPos := idx + len(searchStr)
-
-		// Build insertion string with NO QUOTES, 2 spaces indentation
-		insertion := ""
-		for _, p := range uniquePeers {
-			insertion += fmt.Sprintf("\n  %s", p)
-		}
-
-		newContent := content[:insertPos] + insertion + content[insertPos:]
-		os.WriteFile(detectedConfigPath, []byte(newContent), 0644)
-		fmt.Println(green("Peers added."))
-	} else {
-		// Fallback: Append at end if block not found
-		f, _ := os.OpenFile(detectedConfigPath, os.O_APPEND|os.O_WRONLY, 0644)
-		for _, p := range uniquePeers {
-			f.WriteString(fmt.Sprintf("\nPeers: [\n  %s\n]\n", p))
-		}
-		f.Close()
-	}
+	// Block not found, append to end
+	f, _ := os.OpenFile(detectedConfigPath, os.O_APPEND|os.O_WRONLY, 0644)
+	f.WriteString("\n" + newBlock + "\n")
+	f.Close()
+	fmt.Println(green("Peers block appended."))
 }
 
 func removePeersFromConfig(toRemove []string) {
-	bytes, err := os.ReadFile(detectedConfigPath)
-	if err != nil { return }
-	lines := strings.Split(string(bytes), "\n")
+	// Re-use logic: Get current -> Filter -> Re-add remaining
+	current := getConfigPeers()
+	var keep []string
 
-	var newLines []string
-	for _, line := range lines {
-		keep := true
+	for _, p := range current {
+		shouldRemove := false
 		for _, rem := range toRemove {
-			// If line contains the URI to remove, skip it
-			if strings.Contains(line, rem) {
-				keep = false
-				break
-			}
+			if p == rem { shouldRemove = true; break }
 		}
-		if keep {
-			newLines = append(newLines, line)
+		if !shouldRemove { keep = append(keep, p) }
+	}
+
+	// Reconstruct the block manually to overwrite file
+	contentBytes, err := os.ReadFile(detectedConfigPath)
+	if err != nil { return }
+	content := string(contentBytes)
+
+	newBlock := "Peers: ["
+	for _, p := range keep {
+		newBlock += fmt.Sprintf("\n  %s", p)
+	}
+	newBlock += "\n]"
+
+	startIdx := strings.Index(content, "Peers: [")
+	if startIdx != -1 {
+		endIdx := strings.Index(content[startIdx:], "]")
+		if endIdx != -1 {
+			endIdx += startIdx + 1
+			newContent := content[:startIdx] + newBlock + content[endIdx:]
+			os.WriteFile(detectedConfigPath, []byte(newContent), 0644)
+			fmt.Println(green("Peers removed."))
 		}
 	}
-	os.WriteFile(detectedConfigPath, []byte(strings.Join(newLines, "\n")), 0644)
-	fmt.Println(green("Peers removed."))
 }
 
 // --- Helpers ---
 
 func showStatus() {
 	cmdName := linuxExe
-	if isWindows {
-		cmdName = windowsExe
-	}
+	if isWindows { cmdName = windowsExe }
 	out, _ := exec.Command(cmdName, "getself").CombinedOutput()
 	fmt.Println(string(out))
 	waitEnter()
@@ -747,28 +751,16 @@ func showStatus() {
 
 func manageService(act string) {
 	if isWindows {
-		// Windows: Use Powershell for better service control
-		// Requires Admin
 		cmd := ""
 		switch act {
-			case "Start":
-				cmd = "Start-Service yggdrasil"
-			case "Stop":
-				cmd = "Stop-Service yggdrasil"
-			case "Restart":
-				cmd = "Restart-Service yggdrasil -Force"
-			default:
-				fmt.Println("Autostart config on Windows is automatic via Service Manager.")
-				return
+			case "Start": cmd = "Start-Service yggdrasil"
+			case "Stop": cmd = "Stop-Service yggdrasil"
+			case "Restart": cmd = "Restart-Service yggdrasil -Force"
+			default: return
 		}
-
 		fmt.Printf("Executing: %s\n", cmd)
-		err := exec.Command("powershell", "-Command", cmd).Run()
-		if err != nil {
-			fmt.Println(red("Error (Run as Admin?): "), err)
-		}
+		exec.Command("powershell", "-Command", cmd).Run()
 	} else {
-		// Linux: Systemd
 		verb := strings.ToLower(act)
 		if act == "Enable Autostart" { verb = "enable" }
 		if act == "Disable Autostart" { verb = "disable" }
@@ -780,38 +772,22 @@ func manageService(act string) {
 func restartServicePrompt() {
 	r := false
 	survey.AskOne(&survey.Confirm{Message: "Restart service to apply changes?"}, &r)
-	if r {
-		manageService("Restart")
-	}
+	if r { manageService("Restart") }
 }
 
 func pingPeer(uri string) time.Duration {
 	parts := strings.Split(uri, "://")
-	if len(parts) < 2 {
-		return 999 * time.Second
-	}
+	if len(parts) < 2 { return 999 * time.Second }
 	conn, err := net.DialTimeout("tcp", parts[1], 2*time.Second)
-	if err != nil {
-		return 999 * time.Second
-	}
+	if err != nil { return 999 * time.Second }
 	conn.Close()
 	return 100 * time.Millisecond
 }
 
-func checkAdmin() {
-	if !isWindows && os.Geteuid() != 0 {
-		fmt.Println(red("Root required! (sudo)"))
-		os.Exit(1)
-	}
-}
-
 func getLinuxDistroInfo() (id string, like string) {
 	f, err := os.Open("/etc/os-release")
-	if err != nil {
-		return "unknown", ""
-	}
+	if err != nil { return "unknown", "" }
 	defer f.Close()
-
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -827,24 +803,16 @@ func getLinuxDistroInfo() (id string, like string) {
 
 func getLatestReleaseURL(repo, suffix, archFilter string) (string, error) {
 	resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner, repo))
-	if err != nil {
-		return "", err
-	}
+	if err != nil { return "", err }
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("github api returned %d", resp.StatusCode)
-	}
+	if resp.StatusCode != 200 { return "", fmt.Errorf("github api returned %d", resp.StatusCode) }
 
 	var res map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return "", err
-	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil { return "", err }
 
 	assets, ok := res["assets"].([]interface{})
-	if !ok {
-		return "", fmt.Errorf("no assets found")
-	}
+	if !ok { return "", fmt.Errorf("no assets found") }
 
 	for _, a := range assets {
 		m := a.(map[string]interface{})
@@ -852,8 +820,6 @@ func getLatestReleaseURL(repo, suffix, archFilter string) (string, error) {
 		url, urlOk := m["browser_download_url"].(string)
 
 		if nameOk && urlOk && strings.HasSuffix(name, suffix) {
-			// Apply Architecture Filter
-			// If archFilter is empty, accept any. If not empty, filename must contain it.
 			if archFilter != "" && !strings.Contains(strings.ToLower(name), strings.ToLower(archFilter)) {
 				continue
 			}
@@ -865,30 +831,19 @@ func getLatestReleaseURL(repo, suffix, archFilter string) (string, error) {
 
 func downloadFile(path, url string) error {
 	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
+	if err != nil { return err }
 	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("http status %d", resp.StatusCode)
-	}
-
+	if resp.StatusCode != 200 { return fmt.Errorf("http status %d", resp.StatusCode) }
 	out, err := os.Create(path)
-	if err != nil {
-		return err
-	}
+	if err != nil { return err }
 	defer out.Close()
-
 	_, err = io.Copy(out, resp.Body)
 	return err
 }
 
 func fileExists(p string) bool {
 	info, err := os.Stat(p)
-	if os.IsNotExist(err) {
-		return false
-	}
+	if os.IsNotExist(err) { return false }
 	return !info.IsDir()
 }
 
@@ -899,9 +854,7 @@ func waitEnter() {
 
 func clearScreen() {
 	fmt.Print("\033[H\033[2J")
-	if isWindows {
-		exec.Command("cmd", "/c", "cls").Run()
-	}
+	if isWindows { exec.Command("cmd", "/c", "cls").Run() }
 }
 
 func printBanner() {
@@ -914,6 +867,6 @@ func printBanner() {
 	  \_/ \__, |\__, |______\__,_/___|\__, |
 	       __/ | __/ |                 __/ |
 	      |___/ |___/                 |___/
-	          Configurator v0.1.3
+	          Configurator v0.1.4
 	`))
 }
