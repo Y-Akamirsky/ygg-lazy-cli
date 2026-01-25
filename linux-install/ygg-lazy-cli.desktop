@@ -2,7 +2,7 @@
 Type=Application
 Name=YggLazy-cli
 Comment=Lazy Yggdrasil Network configurator
-Exec=ygg-lazy-cli
+Exec=pkexec /usr/local/bin/ygg-lazy-cli
 Icon=/usr/local/share/icons/ygglazycli.svg
 Terminal=true
 Categories=Utility;Network;
