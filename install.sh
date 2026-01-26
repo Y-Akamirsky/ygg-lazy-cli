@@ -52,4 +52,50 @@ curl -L -o $DESKTOP_DIR "$DESKTOP_URL"
 # Update desktop database (to show icon immediately)
 update-desktop-database /usr/share/applications/ 2>/dev/null
 
+# Generate uninstall script
+echo "Creating uninstaller..."
+cat > /usr/local/bin/ygg-lazy-cli-uninstall << 'UNINSTALL_EOF'
+#!/bin/bash
+
+# Uninstaller for YggLazy-cli
+
+if [ "$EUID" -ne 0 ]; then
+  echo "Please run the uninstaller with sudo"
+  exit 1
+fi
+
+echo "=== Uninstalling YggLazy-cli ==="
+
+# Remove binary
+if [ -f /usr/local/bin/ygg-lazy-cli ]; then
+  echo "Removing binary..."
+  rm /usr/local/bin/ygg-lazy-cli
+fi
+
+# Remove icon
+if [ -f /usr/local/share/icons/ygglazycli.svg ]; then
+  echo "Removing icon..."
+  rm /usr/local/share/icons/ygglazycli.svg
+fi
+
+# Remove desktop file
+if [ -f /usr/share/applications/ygg-lazy-cli.desktop ]; then
+  echo "Removing menu shortcut..."
+  rm /usr/share/applications/ygg-lazy-cli.desktop
+fi
+
+# Update desktop database
+update-desktop-database /usr/share/applications/ 2>/dev/null
+
+# Remove this uninstaller
+echo "Removing uninstaller..."
+rm /usr/local/bin/ygg-lazy-cli-uninstall
+
+echo "Done! YggLazy-cli has been uninstalled."
+UNINSTALL_EOF
+
+chmod +x /usr/local/bin/ygg-lazy-cli-uninstall
+
 echo "Done! Now look for YggLazy-cli in your applications menu."
+echo ""
+echo "To uninstall later, run: sudo ygg-lazy-cli-uninstall"

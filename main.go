@@ -27,6 +27,7 @@ import (
 // --- Constants & Vars ---
 
 const (
+	version    = "0.1.5"
 	repoOwner  = "yggdrasil-network"
 	repoPeers  = "public-peers"
 	windowsExe = `C:\Program Files\Yggdrasil\yggdrasilctl.exe`
@@ -56,22 +57,60 @@ type GitNode struct {
 }
 
 type Peer struct {
-	URI        string
-	Latency    time.Duration
-	MinLatency time.Duration
-	MaxLatency time.Duration
-	Jitter     time.Duration // Standard deviation of latency
-	Stability  float64       // Lower is better (0-1 scale)
+	URI             string
+	Latency         time.Duration
+	MinLatency      time.Duration
+	MaxLatency      time.Duration
+	Jitter          time.Duration // Standard deviation of latency
+	Stability       float64       // Lower is better (0-1 scale)
+	YggdrasilStatus bool          // true if confirmed to be a Yggdrasil node
 }
 
 // --- Main ---
 
 func main() {
-	// 1. Check/Request Admin Privileges immediately
-	ensureAdmin()
-
+	// Parse flags first to allow --version without sudo
 	installFlag := flag.Bool("ygginstall", false, "Install Yggdrasil automatically")
+	versionFlag := flag.Bool("version", false, "Show version information")
+	versionFlagShort := flag.Bool("v", false, "Show version information (shorthand)")
+	helpFlag := flag.Bool("help", false, "Show help information")
+	helpFlagShort := flag.Bool("h", false, "Show help information (shorthand)")
+
+	// Custom usage function
+	flag.Usage = func() {
+		fmt.Printf("YggLazy-cli version %s - Lazy way to configure Yggdrasil Network!\n\n", version)
+		fmt.Println("USAGE:")
+		fmt.Printf("  %s [OPTIONS]\n\n", "ygg-lazy-cli")
+		fmt.Println("OPTIONS:")
+		fmt.Println("  -h, --help         Show this help message")
+		fmt.Println("  -v, --version      Show version information")
+		fmt.Println("  --ygginstall       Install Yggdrasil automatically")
+		fmt.Println("\nEXAMPLES:")
+		fmt.Println("  sudo ygg-lazy-cli                 # Start interactive configurator")
+		fmt.Println("  sudo ygg-lazy-cli --ygginstall    # Auto-install Yggdrasil")
+		fmt.Println("  ygg-lazy-cli --version            # Show version (no sudo needed)")
+		fmt.Println("\nFor more information, visit:")
+		fmt.Println("  https://github.com/Y-Akamirsky/ygg-lazy-cli")
+	}
+
 	flag.Parse()
+
+	// Handle Help Flag
+	if *helpFlag || *helpFlagShort {
+		flag.Usage()
+		return
+	}
+
+	// Handle Version Flag (no admin required)
+	if *versionFlag || *versionFlagShort {
+		fmt.Printf("YggLazy-cli version %s\n", version)
+		fmt.Printf("Built with Go %s\n", runtime.Version())
+		fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		return
+	}
+
+	// Check/Request Admin Privileges for other operations
+	ensureAdmin()
 
 	detectedConfigPath = findConfigPath()
 
@@ -186,13 +225,15 @@ func mainMenu() {
 				"Auto-select Peers (Best Latency)",
 				"Manual Peer Selection",
 				"View Configured Peers",
+				"Check Active Peers Status",
+				"Remove Dead Peers",
 				"Remove Peers",
 				"Add Custom Peer",
 				"Node Status",
 				"Service Control",
 				"Exit",
 			},
-			PageSize: 10,
+			PageSize: 12,
 		}
 
 		err := survey.AskOne(prompt, &mode)
@@ -208,6 +249,10 @@ func mainMenu() {
 			manualAddPeers()
 		case "View Configured Peers":
 			viewCurrentPeers()
+		case "Check Active Peers Status":
+			checkActivePeersStatus()
+		case "Remove Dead Peers":
+			removeDeadPeers()
 		case "Remove Peers":
 			removePeersMenu()
 		case "Add Custom Peer":
@@ -578,7 +623,10 @@ func autoAddPeers() {
 	workers := 20
 	peerChan := make(chan string, limit)
 
-	fmt.Printf("Testing %d peers with 5 attempts each (this may take a minute)...\n", limit)
+	fmt.Printf("Testing %d peers with 5 attempts each...\n", limit)
+	fmt.Println(yellow("Note: Final peer verification happens after adding them to config."))
+	fmt.Println(yellow("Use 'Check Active Peers Status' to verify and 'Remove Dead Peers' to clean up."))
+	fmt.Println()
 
 	// Start workers
 	for i := 0; i < workers; i++ {
@@ -587,14 +635,15 @@ func autoAddPeers() {
 			defer wg.Done()
 			for uri := range peerChan {
 				peer := pingPeerDetailed(uri)
+
 				mu.Lock()
 				tested++
-				// Accept peers with reasonable latency (most important for mesh network)
-				// Relaxed criteria: latency < 5s (was 3s), removed strict stability filter
+
+				// Accept peers with reasonable latency
 				if peer.Latency < 5*time.Second {
 					ranked = append(ranked, peer)
-					fmt.Printf("\r[%d/%d] ✓ Found %d peers (last: %s, jitter: %s, stability: %.0f%%)",
-						tested, limit, len(ranked), peer.Latency, peer.Jitter, (1.0-peer.Stability)*100)
+					fmt.Printf("\r[%d/%d] ✓ Found %d peers (last: %s, jitter: %s)",
+						tested, limit, len(ranked), peer.Latency, peer.Jitter)
 				} else {
 					fmt.Printf("\r[%d/%d] ✗ Testing... (%d peers found)", tested, limit, len(ranked))
 				}
@@ -614,10 +663,8 @@ func autoAddPeers() {
 	fmt.Println()
 
 	// Sort by a combined score of latency and stability
-	// Lower latency and better stability = better peer
 	sort.Slice(ranked, func(i, j int) bool {
 		// Calculate score: latency + (latency * stability)
-		// This gives weight to both metrics
 		scoreI := float64(ranked[i].Latency) * (1.0 + ranked[i].Stability)
 		scoreJ := float64(ranked[j].Latency) * (1.0 + ranked[j].Stability)
 		return scoreI < scoreJ
@@ -627,6 +674,7 @@ func autoAddPeers() {
 	fmt.Printf("\n%s\n", cyan("=== Testing Summary ==="))
 	fmt.Printf("Total peers tested: %d\n", limit)
 	fmt.Printf("Peers found: %s\n", green(fmt.Sprintf("%d", len(ranked))))
+
 	if len(ranked) > 0 {
 		fmt.Printf("Best latency: %s\n", green(ranked[0].Latency.String()))
 		fmt.Printf("Best stability: %.2f%%\n", (1.0-ranked[0].Stability)*100)
@@ -662,6 +710,7 @@ func autoAddPeers() {
 		if ranked[i].Stability > 0.50 {
 			stability = "unstable"
 		}
+
 		fmt.Printf("%d. %s\n   Latency: %s (min: %s, max: %s, jitter: %s) - %s (%.0f%%)\n",
 			i+1, ranked[i].URI, ranked[i].Latency, ranked[i].MinLatency,
 			ranked[i].MaxLatency, ranked[i].Jitter, stability, stabilityPercent)
@@ -1082,12 +1131,203 @@ func pingPeerDetailed(uri string) Peer {
 	}
 
 	return Peer{
-		URI:        uri,
-		Latency:    avgLatency,
-		MinLatency: minLatency,
-		MaxLatency: maxLatency,
-		Jitter:     jitter,
-		Stability:  stability,
+		URI:             uri,
+		Latency:         avgLatency,
+		MinLatency:      minLatency,
+		MaxLatency:      maxLatency,
+		Jitter:          jitter,
+		Stability:       stability,
+		YggdrasilStatus: false,
+	}
+}
+
+// checkActivePeersStatus displays the current status of all peers from yggdrasilctl
+func checkActivePeersStatus() {
+	clearScreen()
+	fmt.Println(cyan("=== Active Peers Status ===\n"))
+
+	cmdName := linuxExe
+	if isWindows {
+		cmdName = windowsExe
+	}
+
+	out, err := exec.Command(cmdName, "getPeers").CombinedOutput()
+	if err != nil {
+		fmt.Println(red("Error: "), err)
+		fmt.Println(yellow("Make sure Yggdrasil service is running."))
+		waitEnter()
+		return
+	}
+
+	fmt.Println(string(out))
+	fmt.Println(yellow("\nTip: Use 'Remove Dead Peers' to clean up peers with 'Down' status."))
+	waitEnter()
+}
+
+// removeDeadPeers removes peers that are currently in "Down" state
+func removeDeadPeers() {
+	clearScreen()
+	fmt.Println(cyan("=== Remove Dead Peers ===\n"))
+
+	cmdName := linuxExe
+	if isWindows {
+		cmdName = windowsExe
+	}
+
+	// Get current peer status from yggdrasilctl
+	fmt.Println("Fetching peer status from Yggdrasil...")
+	out, err := exec.Command(cmdName, "-json", "getPeers").CombinedOutput()
+	if err != nil {
+		fmt.Println(red("Error getting peer status: "), err)
+		fmt.Println(yellow("Make sure Yggdrasil service is running."))
+		waitEnter()
+		return
+	}
+
+	// Parse the JSON response - it's a map with "peers" array
+	var result map[string]interface{}
+	if err := json.Unmarshal(out, &result); err != nil {
+		fmt.Println(red("Error parsing peers data: "), err)
+		waitEnter()
+		return
+	}
+
+	// Get the peers array
+	peersData, ok := result["peers"].([]interface{})
+	if !ok {
+		fmt.Println(yellow("No peer data found in response."))
+		fmt.Println(yellow("Make sure Yggdrasil service is running and has been started with some peers."))
+		waitEnter()
+		return
+	}
+
+	if len(peersData) == 0 {
+		fmt.Println(yellow("No active peer connections found."))
+		fmt.Println(yellow("Yggdrasil might still be starting up or no peers are configured."))
+		waitEnter()
+		return
+	}
+
+	fmt.Printf("\nFound %d peer connection(s) in Yggdrasil. Analyzing...\n\n", len(peersData))
+
+	// Parse peer statuses
+	type PeerStatus struct {
+		URI       string
+		Up        bool
+		LastError string
+	}
+
+	var upPeers []PeerStatus
+	var downPeers []PeerStatus
+
+	for _, peerInterface := range peersData {
+		peer, ok := peerInterface.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		status := PeerStatus{}
+
+		// Get remote URI
+		if remote, ok := peer["remote"].(string); ok {
+			status.URI = remote
+		} else {
+			continue // Skip if no URI
+		}
+
+		// Get up status
+		if up, ok := peer["up"].(bool); ok {
+			status.Up = up
+		}
+
+		// Get last error if exists
+		if lastError, ok := peer["last_error"].(string); ok {
+			status.LastError = lastError
+		}
+
+		if status.Up {
+			upPeers = append(upPeers, status)
+		} else {
+			downPeers = append(downPeers, status)
+		}
+	}
+
+	// Display status
+	fmt.Printf("%s: %d\n", green("Up"), len(upPeers))
+	fmt.Printf("%s: %d\n", red("Down"), len(downPeers))
+	fmt.Println()
+
+	if len(downPeers) == 0 {
+		fmt.Println(green("✓ All peers are up! No dead peers to remove."))
+		waitEnter()
+		return
+	}
+
+	// Show dead peers with errors
+	fmt.Println(red("Dead peers (status: Down):"))
+	for i, peer := range downPeers {
+		fmt.Printf("%d. %s\n", i+1, peer.URI)
+		if peer.LastError != "" {
+			// Truncate error if too long
+			errMsg := peer.LastError
+			if len(errMsg) > 80 {
+				errMsg = errMsg[:77] + "..."
+			}
+			fmt.Printf("   Error: %s\n", yellow(errMsg))
+		}
+	}
+	fmt.Println()
+
+	// Get configured peers to see which ones are in config
+	configuredPeers := getConfigPeers()
+
+	// Find which dead peers are actually in the config
+	var deadPeersInConfig []string
+	var deadPeersNotInConfig []string
+
+	for _, deadPeer := range downPeers {
+		found := false
+		for _, configPeer := range configuredPeers {
+			if configPeer == deadPeer.URI {
+				found = true
+				break
+			}
+		}
+		if found {
+			deadPeersInConfig = append(deadPeersInConfig, deadPeer.URI)
+		} else {
+			deadPeersNotInConfig = append(deadPeersNotInConfig, deadPeer.URI)
+		}
+	}
+
+	if len(deadPeersNotInConfig) > 0 {
+		fmt.Println(yellow("Note: Some dead peers are not in config (possibly added temporarily):"))
+		for _, uri := range deadPeersNotInConfig {
+			fmt.Printf("  - %s\n", uri)
+		}
+		fmt.Println()
+	}
+
+	if len(deadPeersInConfig) == 0 {
+		fmt.Println(yellow("No dead peers found in config to remove."))
+		fmt.Println(yellow("(All dead peers were added temporarily, not via config)"))
+		waitEnter()
+		return
+	}
+
+	// Ask for confirmation
+	fmt.Printf("Found %s dead peers in config:\n", red(fmt.Sprintf("%d", len(deadPeersInConfig))))
+	for i, uri := range deadPeersInConfig {
+		fmt.Printf("%d. %s\n", i+1, uri)
+	}
+	fmt.Println()
+
+	confirm := false
+	survey.AskOne(&survey.Confirm{Message: "Remove these dead peers from config?"}, &confirm)
+	if confirm {
+		removePeersFromConfig(deadPeersInConfig)
+		fmt.Println(green("\n✓ Dead peers removed from config."))
+		restartServicePrompt()
 	}
 }
 
@@ -1185,7 +1425,7 @@ func clearScreen() {
 }
 
 func printBanner() {
-	fmt.Println(cyan(`
+	banner := `
 	__   __           _
 	\ \ / /          | |
 	 \ V / __ _  __ _| |     __ _ _____   _
@@ -1194,6 +1434,6 @@ func printBanner() {
 	  \_/ \__, |\__, |______\__,_/___|\__, |
 	       __/ | __/ |                 __/ |
 	      |___/ |___/                 |___/
-	          Configurator v0.1.4a
-	`))
+	          Configurator v` + version
+	fmt.Println(cyan(banner))
 }

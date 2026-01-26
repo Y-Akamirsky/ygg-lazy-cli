@@ -20,6 +20,17 @@
 - **Press** Enter.
 - **Little** wait...
 - **Use** it!
+
+#### Uninstalling on Linux
+The installer automatically creates an uninstaller. To remove YggLazy-cli:
+```bash
+sudo ygg-lazy-cli-uninstall
+```
+
+Or you can use the standalone uninstall script:
+```bash
+curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/uninstall.sh | sudo bash
+```
     
 ### MacOS
 - Coming soon...
