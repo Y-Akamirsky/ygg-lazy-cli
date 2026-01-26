@@ -1,43 +1,55 @@
 #!/bin/bash
 
-# Проверка на root
+# Check if user is root
 if [ "$EUID" -ne 0 ]; then
-  echo "Пожалуйста, запустите установщик с sudo (нужно для копирования в /usr/local/bin)"
+  echo "Please run the installer with sudo (required for copying to /usr/local/bin)"
   exit
 fi
 
+BIN_DIR=/usr/local/bin/ygg-lazy-cli
+ICON_DIR=/usr/local/share/icons
+ICON=ygglazycli.svg
+DESKTOP_DIR=/usr/share/applications/ygg-lazy-cli.desktop
+
 REPO="Y-Akamirsky/ygg-lazy-cli"
-# Автоопределение архитектуры для скачивания нужного бинарника
+# Check architecture
 ARCH=$(uname -m)
 if [[ "$ARCH" == "x86_64" ]]; then
   BINARY_URL="https://raw.githubusercontent.com/$REPO/main/linux-install/ygg-lazy-cli-amd64"
 elif [[ "$ARCH" == "aarch64" ]]; then
   BINARY_URL="https://raw.githubusercontent.com/$REPO/main/linux-install/ygg-lazy-cli-arm64"
 else
-  echo "Архитектура $ARCH не поддерживается... пока что."
+  echo "Architecture $ARCH is not supported... yet."
   exit 1
 fi
 
 ICON_URL="https://raw.githubusercontent.com/$REPO/main/linux-install/ygglazycli.svg"
 DESKTOP_URL="https://raw.githubusercontent.com/$REPO/main/linux-install/ygg-lazy-cli.desktop"
+echo "=== Cheking old version ==="
 
-echo "=== Установка YggLazy-cli ==="
+# Check if old version exists and remove it
+if [ -f "$BIN_DIR" ]; then
+  echo "Old version found, removing..."
+  rm "$BIN_DIR"
+fi
 
-# 1. Скачиваем бинарник
-echo "Скачивание бинарника..."
-curl -L -o /usr/local/bin/ygg-lazy-cli "$BINARY_URL"
-chmod +x /usr/local/bin/ygg-lazy-cli
+echo "=== Installing YggLazy-cli ==="
 
-# 2. Скачиваем иконку
-echo "Установка иконки..."
-mkdir -p /usr/local/share/icons
-curl -L -o /usr/local/share/icons/ygglazycli.svg "$ICON_URL"
+# 1. Download a binary
+echo "Downloading binary..."
+curl -L -o $BIN_DIR "$BINARY_URL"
+chmod +x $BIN_DIR
 
-# 3. Скачиваем .desktop файл
-echo "Создание ярлыка меню..."
-curl -L -o /usr/share/applications/ygg-lazy-cli.desktop "$DESKTOP_URL"
+# 2. Download an icon
+echo "Installing icon..."
+mkdir -p $ICON_DIR
+curl -L -o $ICON_DIR/$ICON "$ICON_URL"
 
-# Обновляем кэш десктоп файлов (чтобы иконка появилась сразу)
+# 3. Download .desktop file
+echo "Creating menu shortcut..."
+curl -L -o $DESKTOP_DIR "$DESKTOP_URL"
+
+# Update desktop database (to show icon immediately)
 update-desktop-database /usr/share/applications/ 2>/dev/null
 
-echo "Готово! Теперь ищите YggLazy-cli в меню приложений."
+echo "Done! Now look for YggLazy-cli in your applications menu."
