@@ -40,11 +40,12 @@ sudo ygg-lazy-cli-uninstall
 ### Go doesn't install automatically
 
 ```bash
-# Install Go manually via 'g' utility
+# Install Go manually via 'g' utility if your distribution doesn't provide it or the version in the repository is outdated
 curl -sSL https://git.io/g-install | sh -s
 source ~/.bashrc
 g install latest
-
+```
+```bash
 # Then retry installation
 curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/install.sh | sudo bash
 ```
@@ -70,7 +71,7 @@ sudo update-desktop-database /usr/share/applications/
 
 ## Why Compile on Device?
 
-On older distributions (Debian 12, Slackware), pre-compiled binaries may fail due to CPU instruction incompatibility. Compiling on your device solves this.
+On older PCs, pre-compiled binaries may fail due to CPU instruction incompatibility. Compiling on your device solves this.
 
 ## Manual Installation
 
