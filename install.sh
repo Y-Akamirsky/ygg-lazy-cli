@@ -68,7 +68,7 @@ install_go_with_g() {
     # Install 'g' for the current user (non-root)
     # Force bash execution regardless of user's default shell
 
-    su $ACTUAL_USER -c 'curl -sSL https://git.io/g-install | bash -s' || {
+    su $ACTUAL_USER -c 'curl -sSL https://git.io/g-install | bash -s -y' || {
       echo "Error: Failed to install 'g' utility"
       exit 1
     }
@@ -132,7 +132,7 @@ cd project
 echo "=== Compiling YggLazy-cli ==="
 
 # Compile with compatibility flags to avoid CPU instruction issues
-echo "Compiling binary for maximum compatibility..."
+echo "Compiling may take a while..."
 
 # Set up environment and compile as user
 su $ACTUAL_USER -c "cd '$BUILD_DIR/project' && \
@@ -242,6 +242,7 @@ echo ""
 echo "===================================="
 echo "Done! YggLazy-cli has been installed."
 echo "Look for YggLazy-cli in your applications menu."
+echo "Or type 'sudo ygg-lazy-cli' in the terminal."
 echo ""
 echo "To uninstall later, run: sudo ygg-lazy-cli-uninstall"
 echo "===================================="
