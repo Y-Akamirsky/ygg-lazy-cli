@@ -45,8 +45,11 @@ ygg-lazy-cli --help
     curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/install.sh | sudo bash
     ```
 - **Press** Enter.
-- **Little** wait...
+- **Wait** for compilation - the program will be built on your device for maximum compatibility!
 - **Use** it!
+
+> **Note**: Installation takes 1-5 minutes - the program is compiled on your device for maximum compatibility.  
+> Details: [Russian guide](docs/INSTALL_RU.md) | [English guide](docs/INSTALL.md)
 
 #### Uninstalling on Linux
 - The installer automatically creates an uninstaller. **To remove YggLazy-cli:**

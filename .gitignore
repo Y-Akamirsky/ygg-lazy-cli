@@ -1,0 +1,13 @@
+# Dev notes
+DEVNOTES.md
+*.swp
+*~
+.kate-swp
+
+# Build artifacts
+ygg-lazy-cli
+*.exe
+
+# IDE
+.vscode/
+.idea/
