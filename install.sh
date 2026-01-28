@@ -68,7 +68,7 @@ install_go_with_g() {
     # Install 'g' for the current user (non-root)
     # Force bash execution regardless of user's default shell
 
-    su $ACTUAL_USER -c 'curl -sSL https://git.io/g-install | bash -s -y' || {
+    su $ACTUAL_USER -c 'curl -sSL https://git.io/g-install | bash -s -- -y' || {
       echo "Error: Failed to install 'g' utility"
       exit 1
     }
