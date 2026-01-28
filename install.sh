@@ -67,7 +67,8 @@ install_go_with_g() {
     echo "Installing 'g' utility..."
     # Install 'g' for the current user (non-root)
 
-    su - $ACTUAL_USER -c 'curl -sSL https://git.io/g-install | sh -s' || {
+    ACTUAL_USER_SHELL=$(getent passwd "$ACTUAL_USER" | cut -d: -f7)
+    su - $ACTUAL_USER -c "curl -sSL https://git.io/g-install | sh -s -- $ACTUAL_USER_SHELL" || {
       echo "Error: Failed to install 'g' utility"
       exit 1
     }
