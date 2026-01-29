@@ -69,7 +69,7 @@ install_go_with_g() {
     # Force bash execution regardless of user's default shell
     # Use IGNORE_QUESTIONS=1 for non-interactive installation
 
-    su $ACTUAL_USER -c 'export IGNORE_QUESTIONS=1; curl -sSL https://git.io/g-install | bash' || {
+    su $ACTUAL_USER -c 'export IGNORE_QUESTIONS=1; curl -sSL https://git.io/g-install | sh -s' || {
       echo "Error: Failed to install 'g' utility"
       exit 1
     }
