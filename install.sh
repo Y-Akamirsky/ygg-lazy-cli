@@ -66,10 +66,9 @@ install_go_with_g() {
   else
     echo "Installing 'g' utility..."
     # Install 'g' for the current user (non-root)
-    # Force bash execution regardless of user's default shell
-    # Use IGNORE_QUESTIONS=1 for non-interactive installation
+    # Download and run installer non-interactively by piping 'y' to stdin
 
-    su $ACTUAL_USER -c 'export IGNORE_QUESTIONS=1; curl -sSL https://git.io/g-install | sh -s' || {
+    su $ACTUAL_USER -c "echo 'y' | bash -c 'curl -sSL https://git.io/g-install | bash'" || {
       echo "Error: Failed to install 'g' utility"
       exit 1
     }
@@ -89,7 +88,7 @@ install_go_with_g() {
 
   # Install latest Go version using 'g'
   echo "Installing latest Go version..."
-  su $ACTUAL_USER -c 'export PATH="$HOME/.go/bin:$PATH"; bash -c "g install latest"' || {
+  su $ACTUAL_USER -c 'export PATH="$HOME/.go/bin:$HOME/go/bin:$PATH"; echo "y" | g install latest' || {
     echo "Error: Failed to install Go using 'g'"
     exit 1
   }
