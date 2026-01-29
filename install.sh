@@ -66,11 +66,14 @@ install_go_with_g() {
   else
     echo "Installing 'g' utility..."
     # Install 'g' for the current user (non-root)
-    # Download and run installer non-interactively by piping 'y' to stdin
+    # Use timeout with yes to auto-answer prompts, suppress stty errors
 
-    su $ACTUAL_USER -c "echo 'y' | bash -c 'curl -sSL https://git.io/g-install | bash'" || {
-      echo "Error: Failed to install 'g' utility"
-      exit 1
+    timeout 30 bash -c "yes 2>/dev/null | sudo -u $ACTUAL_USER bash -c 'curl -sSL https://git.io/g-install | bash 2>&1' | grep -v 'stty:'" || {
+      # Check if g was actually installed despite timeout/errors
+      if ! sudo -u $ACTUAL_USER bash -c 'command -v g' >/dev/null 2>&1; then
+        echo "Error: Failed to install 'g' utility"
+        exit 1
+      fi
     }
 
     G_INSTALLED_BY_SCRIPT=1
@@ -88,9 +91,12 @@ install_go_with_g() {
 
   # Install latest Go version using 'g'
   echo "Installing latest Go version..."
-  su $ACTUAL_USER -c 'export PATH="$HOME/.go/bin:$HOME/go/bin:$PATH"; echo "y" | g install latest' || {
-    echo "Error: Failed to install Go using 'g'"
-    exit 1
+  timeout 60 bash -c "yes 2>/dev/null | sudo -u $ACTUAL_USER bash -c 'export PATH=\"\$HOME/.go/bin:\$HOME/go/bin:\$PATH\"; g install latest 2>&1' | grep -v 'stty:'" || {
+    # Check if Go was actually installed despite timeout/errors
+    if ! sudo -u $ACTUAL_USER bash -c 'export PATH="$HOME/.go/bin:$PATH"; command -v go' >/dev/null 2>&1; then
+      echo "Error: Failed to install Go using 'g'"
+      exit 1
+    fi
   }
 
   echo "Go installed successfully via 'g'"
@@ -135,7 +141,7 @@ echo "=== Compiling YggLazy-cli ==="
 echo "Compiling may take a while..."
 
 # Set up environment and compile as user
-su $ACTUAL_USER -c "cd '$BUILD_DIR/project' && \
+sudo -u $ACTUAL_USER bash -c "cd '$BUILD_DIR/project' && \
   export GOPATH='$GOPATH' && \
   export GOROOT='$GOROOT' && \
   export PATH='$PATH' && \
