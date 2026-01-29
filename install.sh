@@ -56,55 +56,66 @@ check_go_version() {
   fi
 }
 
-# Function to install 'g' and latest Go
-install_go_with_g() {
-  echo "Installing Go using 'g' utility..."
+# Function to install Go directly from official source
+install_go_direct() {
+  echo "Installing Go directly from official source..."
 
-  # Check if 'g' is already installed
-  if command -v g >/dev/null 2>&1; then
-    echo "'g' utility is already installed, using it..."
-  else
-    echo "Installing 'g' utility..."
-    # Install 'g' for the current user (non-root)
-    # Use timeout with yes to auto-answer prompts, suppress stty errors
+  # Use required version for compilation
+  GO_VERSION="1.25.6"
+  GO_TAR="go${GO_VERSION}.linux-amd64.tar.gz"
+  GO_URL="https://go.dev/dl/${GO_TAR}"
 
-    timeout 30 bash -c "yes 2>/dev/null | sudo -u $ACTUAL_USER bash -c 'curl -sSL https://git.io/g-install | bash 2>&1' | grep -v 'stty:'" || {
-      # Check if g was actually installed despite timeout/errors
-      if ! sudo -u $ACTUAL_USER bash -c 'command -v g' >/dev/null 2>&1; then
-        echo "Error: Failed to install 'g' utility"
-        exit 1
-      fi
-    }
-
-    G_INSTALLED_BY_SCRIPT=1
-
-    # Set PATH to include g
-    export GOPATH="$ACTUAL_HOME/go"
-    export GOROOT="$ACTUAL_HOME/.go"
-    export PATH="$GOPATH/bin:$PATH"
-  fi
-
-  # Set up 'g' paths
-  export GOPATH="$ACTUAL_HOME/go"
-  export GOROOT="$ACTUAL_HOME/.go"
-  export PATH="$GOPATH/bin:$PATH"
-
-  # Install latest Go version using 'g'
-  echo "Installing latest Go version..."
-  timeout 60 bash -c "yes 2>/dev/null | sudo -u $ACTUAL_USER bash -c 'export PATH=\"\$HOME/.go/bin:\$HOME/go/bin:\$PATH\"; g install latest 2>&1' | grep -v 'stty:'" || {
-    # Check if Go was actually installed despite timeout/errors
-    if ! sudo -u $ACTUAL_USER bash -c 'export PATH="$HOME/.go/bin:$PATH"; command -v go' >/dev/null 2>&1; then
-      echo "Error: Failed to install Go using 'g'"
-      exit 1
-    fi
+  # Download Go
+  echo "Downloading Go ${GO_VERSION}..."
+  cd /tmp
+  wget -q --show-progress "$GO_URL" || {
+    echo "Error: Failed to download Go"
+    exit 1
   }
 
-  echo "Go installed successfully via 'g'"
+  # Extract to user's home directory
+  echo "Extracting Go..."
+  sudo -u $ACTUAL_USER mkdir -p "$ACTUAL_HOME/.go"
+  sudo -u $ACTUAL_USER tar -C "$ACTUAL_HOME" -xzf "$GO_TAR" || {
+    echo "Error: Failed to extract Go"
+    exit 1
+  }
+
+  # Move to .go directory
+  sudo -u $ACTUAL_USER bash -c "rm -rf '$ACTUAL_HOME/.go' && mv '$ACTUAL_HOME/go' '$ACTUAL_HOME/.go'"
+
+  # Clean up
+  rm -f "$GO_TAR"
+
+  # Set up paths
+  export GOROOT="$ACTUAL_HOME/.go"
+  export GOPATH="$ACTUAL_HOME/go"
+  export PATH="$GOROOT/bin:$GOPATH/bin:$PATH"
+
+  # Add to shell profiles for the user
+  for profile_file in "$ACTUAL_HOME/.bashrc" "$ACTUAL_HOME/.zshrc" "$ACTUAL_HOME/.profile"; do
+    if [ -f "$profile_file" ]; then
+      # Check if Go paths are already in profile
+      if ! grep -q "export GOROOT=" "$profile_file" 2>/dev/null; then
+        sudo -u $ACTUAL_USER bash -c "cat >> '$profile_file' << 'EOF'
+
+# Go environment (added by ygg-lazy-cli installer)
+export GOROOT=\$HOME/.go
+export GOPATH=\$HOME/go
+export PATH=\$GOROOT/bin:\$GOPATH/bin:\$PATH
+EOF"
+      fi
+    fi
+  done
+
+  G_INSTALLED_BY_SCRIPT=1
+
+  echo "Go ${GO_VERSION} installed successfully"
 }
 
 # Check if Go is available and sufficient
 if ! check_go_version; then
-  install_go_with_g
+  install_go_direct
 fi
 
 # Ensure Go is in PATH
@@ -176,28 +187,26 @@ curl -L -o "$DESKTOP_DIR" "$DESKTOP_URL" || {
 # Update desktop database (to show icon immediately)
 update-desktop-database /usr/share/applications/ 2>/dev/null
 
-# Clean up 'g' if it was installed by this script
+# Clean up Go if it was installed by this script
 if [ $G_INSTALLED_BY_SCRIPT -eq 1 ]; then
   echo "=== Cleaning up ==="
-  echo "Removing 'g' utility (installed by this script)..."
+  echo "Removing Go installation (installed by this script)..."
   ACTUAL_USER="${SUDO_USER:-$USER}"
   ACTUAL_HOME=$(eval echo ~$ACTUAL_USER)
 
-  # Remove 'g' and its configuration
+  # Remove Go and its configuration
   rm -rf "$ACTUAL_HOME/.go"
+  rm -rf "$ACTUAL_HOME/go"
 
-  # Remove 'g' shell configuration from profile files
+  # Remove Go shell configuration from profile files
   for profile_file in "$ACTUAL_HOME/.bashrc" "$ACTUAL_HOME/.zshrc" "$ACTUAL_HOME/.profile"; do
     if [ -f "$profile_file" ]; then
-      # Remove lines added by g-install
-      sed -i '/# g-install/,+2d' "$profile_file" 2>/dev/null
-      sed -i '/export GOROOT/d' "$profile_file" 2>/dev/null
-      sed -i '/export GOPATH/d' "$profile_file" 2>/dev/null
-      sed -i '/export PATH.*\.go/d' "$profile_file" 2>/dev/null
+      # Remove lines added by ygg-lazy-cli installer
+      sed -i '/# Go environment (added by ygg-lazy-cli installer)/,+3d' "$profile_file" 2>/dev/null
     fi
   done
 
-  echo "'g' utility has been removed"
+  echo "Go has been removed"
 fi
 
 # Generate uninstall script
