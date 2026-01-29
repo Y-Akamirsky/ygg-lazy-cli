@@ -104,7 +104,7 @@ fi
 
 # Ensure Go is in PATH
 if ! command -v go >/dev/null 2>&1; then
-  export GOPATH="$ACTUAL_HOME/.go"
+  export GOPATH="$ACTUAL_HOME/go"
   export GOROOT="$ACTUAL_HOME/.go"
   export PATH="$GOPATH/bin:$PATH"
 fi
