@@ -77,13 +77,13 @@ install_go_with_g() {
     G_INSTALLED_BY_SCRIPT=1
 
     # Set PATH to include g
-    export GOPATH="$ACTUAL_HOME/.go"
+    export GOPATH="$ACTUAL_HOME/go"
     export GOROOT="$ACTUAL_HOME/.go"
     export PATH="$GOPATH/bin:$PATH"
   fi
 
   # Set up 'g' paths
-  export GOPATH="$ACTUAL_HOME/.go"
+  export GOPATH="$ACTUAL_HOME/go"
   export GOROOT="$ACTUAL_HOME/.go"
   export PATH="$GOPATH/bin:$PATH"
 
