@@ -27,7 +27,7 @@ import (
 // --- Constants & Vars ---
 
 const (
-	version    = "0.1.5"
+	version    = "0.1.6"
 	repoOwner  = "yggdrasil-network"
 	repoPeers  = "public-peers"
 	windowsExe = `C:\Program Files\Yggdrasil\yggdrasilctl.exe`
@@ -110,9 +110,9 @@ func main() {
 	}
 
 	// Check/Request Admin Privileges for other operations
-	ensureAdmin()
+	currentPlatform.EnsureAdmin()
 
-	detectedConfigPath = findConfigPath()
+	detectedConfigPath = currentPlatform.FindConfigPath()
 
 	// Handle Install Flag
 	if *installFlag {
@@ -127,7 +127,7 @@ func main() {
 		survey.AskOne(&survey.Confirm{Message: "Yggdrasil config missing. Install/Generate now?"}, &confirm)
 		if confirm {
 			installYggdrasil()
-			detectedConfigPath = findConfigPath()
+			detectedConfigPath = currentPlatform.FindConfigPath()
 		} else {
 			fmt.Println("Exiting.")
 			os.Exit(0)
@@ -137,75 +137,7 @@ func main() {
 	mainMenu()
 }
 
-// --- Admin & Path Helpers ---
-
-func ensureAdmin() {
-	if isWindows {
-		if !amAdminWindows() {
-			fmt.Println(yellow("Administrator privileges required. Relaunching..."))
-			runMeElevated()
-		}
-	} else {
-		if os.Geteuid() != 0 {
-			fmt.Println(red("Root required! Please run with sudo."))
-			os.Exit(1)
-		}
-	}
-}
-
-func amAdminWindows() bool {
-	// "net session" requires admin. If it fails (exit code != 0), we are not admin.
-	_, err := exec.Command("net", "session").Output()
-	return err == nil
-}
-
-func runMeElevated() {
-	exe, _ := os.Executable()
-	cwd, _ := os.Getwd()
-	// Reconstruct args
-	args := strings.Join(os.Args[1:], " ")
-
-	// Use PowerShell Start-Process -Verb RunAs to trigger UAC
-	cmd := exec.Command("powershell", "Start-Process",
-		"-FilePath", fmt.Sprintf("'%s'", exe),
-		"-ArgumentList", fmt.Sprintf("'%s'", args),
-		"-Verb", "RunAs",
-		"-WorkingDirectory", fmt.Sprintf("'%s'", cwd))
-
-	err := cmd.Start()
-	if err != nil {
-		fmt.Println(red("Failed to elevate: "), err)
-		os.Exit(1)
-	}
-	os.Exit(0)
-}
-
-func findConfigPath() string {
-	if isWindows {
-		paths := []string{
-			`C:\ProgramData\Yggdrasil\yggdrasil.conf`,
-			`C:\Program Files\Yggdrasil\yggdrasil.conf`,
-		}
-		for _, p := range paths {
-			if fileExists(p) {
-				return p
-			}
-		}
-		return `C:\ProgramData\Yggdrasil\yggdrasil.conf`
-	}
-
-	paths := []string{
-		"/etc/yggdrasil.conf",
-		"/etc/yggdrasil/yggdrasil.conf",
-		"/etc/Yggdrasil/yggdrasil.conf",
-	}
-	for _, p := range paths {
-		if fileExists(p) {
-			return p
-		}
-	}
-	return "/etc/yggdrasil.conf"
-}
+// --- Path & Menu Helpers ---
 
 // --- Menus ---
 
@@ -272,15 +204,20 @@ func serviceMenu() {
 	for {
 		clearScreen()
 		action := ""
+		serviceOptions := append(currentPlatform.GetServiceCommands(), "Back")
 		prompt := &survey.Select{
 			Message: "Service Control (Esc to back):",
-			Options: []string{"Start", "Stop", "Restart", "Enable Autostart", "Disable Autostart", "Back"},
+			Options: serviceOptions,
 		}
 		err := survey.AskOne(prompt, &action)
 		if err == terminal.InterruptErr || action == "Back" {
 			return
 		}
-		manageService(action)
+		if err := currentPlatform.ManageService(action); err != nil {
+			fmt.Println(red("Service operation failed: "), err)
+		} else {
+			fmt.Println(green("Done."))
+		}
 		waitEnter()
 	}
 }
@@ -305,21 +242,13 @@ func viewCurrentPeers() {
 func installYggdrasil() {
 	fmt.Println(cyan("=== Yggdrasil Installer ==="))
 
-	if isWindows {
-		if err := installWindows(); err != nil {
-			fmt.Println(red("Installation failed: "), err)
-			waitEnter()
-			return
-		}
-	} else {
-		if err := installLinux(); err != nil {
-			fmt.Println(red("Installation failed: "), err)
-			waitEnter()
-			return
-		}
+	if err := currentPlatform.Install(); err != nil {
+		fmt.Println(red("Installation failed: "), err)
+		waitEnter()
+		return
 	}
 
-	detectedConfigPath = findConfigPath()
+	detectedConfigPath = currentPlatform.FindConfigPath()
 	if !fileExists(detectedConfigPath) {
 		fmt.Println("Generating config...")
 		cmdName := "yggdrasil"
@@ -339,178 +268,6 @@ func installYggdrasil() {
 		}
 	}
 	waitEnter()
-}
-
-func installWindows() error {
-	fmt.Println("Fetching latest release...")
-
-	// Determine Architecture for Windows
-	arch := runtime.GOARCH
-	var searchStr string
-	if arch == "amd64" {
-		searchStr = "x64"
-	} else if arch == "386" {
-		searchStr = "x86"
-	} else {
-		searchStr = arch
-	}
-
-	url, err := getLatestReleaseURL("yggdrasil-go", ".msi", searchStr)
-	if err != nil {
-		return err
-	}
-
-	filename := "yggdrasil_installer.msi"
-	fmt.Printf("Downloading %s (Arch: %s)...\n", url, arch)
-	if err := downloadFile(filename, url); err != nil {
-		return err
-	}
-
-	fmt.Println("Running MSI installer (Admin rights required)...")
-	// Using /norestart /qn for silent install, or /qb for basic UI
-	cmd := exec.Command("msiexec", "/i", filename, "/qb", "/norestart")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	os.Remove(filename)
-	fmt.Println(green("Installation complete."))
-	return nil
-}
-
-func installLinux() error {
-	distroID, distroLike := getLinuxDistroInfo()
-	fmt.Printf("Detected Distro: %s (Like: %s)\n", distroID, distroLike)
-
-	// --- Detection Logic ---
-
-	// Check if Debian/Ubuntu based
-	isDebian := strings.Contains(distroID, "debian") || strings.Contains(distroID, "ubuntu") ||
-		strings.Contains(distroID, "mint") || strings.Contains(distroID, "kali") ||
-		strings.Contains(distroID, "pop") || strings.Contains(distroLike, "debian") ||
-		strings.Contains(distroLike, "ubuntu")
-
-	// Check if Arch based
-	isArch := strings.Contains(distroID, "arch") || strings.Contains(distroID, "manjaro") ||
-		strings.Contains(distroID, "cachyos") || strings.Contains(distroID, "endeavour") ||
-		strings.Contains(distroLike, "arch")
-
-	// Check if Fedora/RHEL based
-	isFedora := strings.Contains(distroID, "fedora") || strings.Contains(distroID, "rhel") ||
-		strings.Contains(distroID, "centos") || strings.Contains(distroID, "almalinux") ||
-		strings.Contains(distroID, "rocky") || strings.Contains(distroLike, "fedora")
-
-	// Check if Void Linux
-	isVoid := strings.Contains(distroID, "void")
-
-	// Check if Alpine Linux
-	isAlpine := strings.Contains(distroID, "alpine")
-
-	// --- Installation Logic ---
-
-	if isDebian {
-		choice := ""
-		survey.AskOne(&survey.Select{
-			Message: "Installation Method:",
-			Options: []string{"Download .deb", "Use APT Repository"},
-		}, &choice)
-
-		if choice == "Download .deb" {
-			arch := runtime.GOARCH
-			// Adjust arch string if necessary for .deb naming conventions
-			if arch == "arm64" {
-				// usually matches, but good to keep in mind
-			}
-
-			url, err := getLatestReleaseURL("yggdrasil-go", ".deb", arch)
-			if err != nil {
-				return err
-			}
-
-			fmt.Printf("Downloading %s...\n", url)
-			if err := downloadFile("ygg.deb", url); err != nil {
-				return err
-			}
-			defer os.Remove("ygg.deb")
-
-			cmd := exec.Command("apt", "install", "./ygg.deb", "-y")
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			return cmd.Run()
-		} else {
-			// APT logic
-			cmds := [][]string{
-				{"sh", "-c", "curl -s https://neilalexander.s3.dualstack.eu-west-2.amazonaws.com/deb/key/neilalexander.gpg | gpg --dearmor > /usr/local/share/keyrings/neilalexander.gpg"},
-				{"sh", "-c", "echo 'deb [signed-by=/usr/local/share/keyrings/neilalexander.gpg] http://neilalexander.s3.dualstack.eu-west-2.amazonaws.com/deb/ debian yggdrasil' > /etc/apt/sources.list.d/yggdrasil.list"},
-				{"apt", "update"},
-				{"apt", "install", "yggdrasil", "-y"},
-			}
-			return runCommands(cmds)
-		}
-
-	} else if isFedora {
-		// Fedora uses COPR for Yggdrasil
-		fmt.Println("Detected Fedora-based system. Using DNF and COPR...")
-
-		// Ensure dnf-plugins-core is installed to use 'copr' command
-		// Note: On newer Fedora versions, this is often built-in or named 'dnf-command(copr)'
-		cmds := [][]string{
-			{"dnf", "install", "dnf-plugins-core", "-y"},
-			{"dnf", "copr", "enable", "neilalexander/yggdrasil", "-y"},
-			{"dnf", "install", "yggdrasil", "-y"},
-		}
-		return runCommands(cmds)
-
-	} else if isVoid {
-		// Void Linux logic (xbps)
-		fmt.Println("Detected Void Linux. Using xbps-install...")
-
-		// -S to sync repo index, -y for auto yes
-		cmd := exec.Command("xbps-install", "-S", "yggdrasil", "-y")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("xbps-install failed: %v", err)
-		}
-		fmt.Println("Installed successfully via XBPS.")
-		return nil
-
-	} else if isAlpine {
-		// Alpine Linux logic (apk)
-		fmt.Println("Detected Alpine Linux. Using apk...")
-
-		// Assuming yggdrasil is available in community/testing repos enabled by user
-		cmd := exec.Command("apk", "add", "yggdrasil")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("apk failed: %v", err)
-		}
-		fmt.Println("Installed successfully via APK.")
-		return nil
-
-	} else if isArch {
-		// Arch / CachyOS logic
-		fmt.Println("Detected Arch-based system. Attempting to install via pacman...")
-		pkgs := []string{"yggdrasil-go", "yggdrasil"}
-		for _, pkg := range pkgs {
-			fmt.Printf("Trying package: %s\n", pkg)
-			cmd := exec.Command("pacman", "-S", pkg, "--noconfirm")
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err := cmd.Run()
-			if err == nil {
-				fmt.Println("Installed successfully.")
-				return nil
-			}
-			fmt.Printf("Failed to install %s. Trying next...\n", pkg)
-		}
-		return fmt.Errorf("could not install yggdrasil via pacman. Try installing manually from AUR")
-	}
-
-	return fmt.Errorf("unsupported distribution: %s", distroID)
 }
 
 // Helper function to keep code clean (used in Debian/Fedora blocks)
@@ -594,14 +351,46 @@ func autoAddPeers() {
 		fmt.Println(red("Error: "), err)
 		return
 	}
-	var allUrls []string
-	for _, u := range regionMap {
-		allUrls = append(allUrls, u...)
+
+	// Build region list for selection
+	var regions []string
+	for region := range regionMap {
+		regions = append(regions, region)
+	}
+	sort.Strings(regions)
+
+	// Build region options
+	regionOptions := []string{"All regions"}
+	regionOptions = append(regionOptions, regions...)
+	regionOptions = append(regionOptions, "Cancel")
+
+	// Ask user to select region
+	regionPrompt := &survey.Select{
+		Message: "Select region to test peers from:",
+		Options: regionOptions,
+		Default: "All regions",
+	}
+	var selectedRegion string
+	survey.AskOne(regionPrompt, &selectedRegion)
+
+	if selectedRegion == "Cancel" {
+		return
 	}
 
-	fmt.Printf("Fetching from %d regions...\n", len(regionMap))
+	// Collect URLs based on selection
+	var allUrls []string
+	if selectedRegion == "All regions" {
+		for _, u := range regionMap {
+			allUrls = append(allUrls, u...)
+		}
+		fmt.Printf("Fetching from %d regions...\n", len(regionMap))
+	} else {
+		allUrls = regionMap[selectedRegion]
+		fmt.Printf("Fetching peers from %s region...\n", cyan(selectedRegion))
+	}
+
 	allPeers := fetchPeersFromURLs(allUrls)
-	fmt.Printf("Total peers found: %d. Pinging subset...\n", len(allPeers))
+	fmt.Printf("Total peers found: %d. Testing all...\n", len(allPeers))
 
 	// Shuffle
 	for i := range allPeers {
@@ -609,10 +398,7 @@ func autoAddPeers() {
 		allPeers[i], allPeers[j] = allPeers[j], allPeers[i]
 	}
 
-	limit := 100
-	if len(allPeers) < limit {
-		limit = len(allPeers)
-	}
+	limit := len(allPeers)
 
 	var ranked []Peer
 	var mu sync.Mutex
@@ -995,39 +781,15 @@ func showStatus() {
 	waitEnter()
 }
 
-func manageService(act string) {
-	if isWindows {
-		cmd := ""
-		switch act {
-		case "Start":
-			cmd = "Start-Service yggdrasil"
-		case "Stop":
-			cmd = "Stop-Service yggdrasil"
-		case "Restart":
-			cmd = "Restart-Service yggdrasil -Force"
-		default:
-			return
-		}
-		fmt.Printf("Executing: %s\n", cmd)
-		exec.Command("powershell", "-Command", cmd).Run()
-	} else {
-		verb := strings.ToLower(act)
-		if act == "Enable Autostart" {
-			verb = "enable"
-		}
-		if act == "Disable Autostart" {
-			verb = "disable"
-		}
-		exec.Command("systemctl", verb, "yggdrasil").Run()
-	}
-	fmt.Println(green("Done."))
-}
-
 func restartServicePrompt() {
 	r := false
-	survey.AskOne(&survey.Confirm{Message: "Restart service to apply changes?"}, &r)
+	survey.AskOne(&survey.Confirm{Message: "Restart Yggdrasil service now?"}, &r)
 	if r {
-		manageService("Restart")
+		if err := currentPlatform.ManageService("Restart"); err != nil {
+			fmt.Println(red("Restart failed: "), err)
+		} else {
+			fmt.Println(green("Service restarted."))
+		}
 	}
 }
 
