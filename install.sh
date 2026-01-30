@@ -7,7 +7,6 @@ REPO="Y-Akamirsky/ygg-lazy-cli"
 GO_VERSION="1.25.6"
 
 PREFIX="/usr/local"
-SCRIPT_PATH="$(realpath "$0")"
 BIN_PATH="$PREFIX/bin/$APP_NAME"
 ICON_PATH="$PREFIX/share/icons/ygglazycli.svg"
 DESKTOP_PATH="/usr/share/applications/ygg-lazy-cli.desktop"
@@ -27,6 +26,13 @@ DESKTOP_URL="https://raw.githubusercontent.com/$REPO/main/linux-install/ygg-lazy
 ### UTILS ###
 log() { echo "→ $*"; }
 die() { echo "✗ $*" >&2; exit 1; }
+cleanup_on_error() {
+  if [[ -d "$CACHE_DIR" ]]; then
+    log "Cleaning up cache directory due to error"
+    rm -rf "$CACHE_DIR"
+  fi
+}
+trap cleanup_on_error ERR
 
 ### ROOT ESCALATION (INSTALL PHASE) ###
 if [[ "${1:-}" == "--install" ]]; then
@@ -34,6 +40,7 @@ if [[ "${1:-}" == "--install" ]]; then
 
   BUILD_DIR="$2"
   CACHE_DIR="$3"
+  SCRIPT_PATH="$4"
 
   [[ -x "$BUILD_DIR/$APP_NAME" ]] || die "Binary not found: $BUILD_DIR/$APP_NAME"
 
@@ -112,7 +119,10 @@ fi
 
 if $need_go; then
   log "Fetching Go $GO_VERSION locally"
-  mkdir -p "$GO_ROOT"
+  # Clean up any previous Go installation attempts
+  rm -rf "$GO_ROOT" "$CACHE_DIR/go"
+  mkdir -p "$CACHE_DIR"
+
   curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
     | tar -xz -C "$CACHE_DIR"
   mv "$CACHE_DIR/go" "$GO_ROOT"
@@ -139,13 +149,23 @@ curl -fsSL -o "$CACHE_DIR/ygg-lazy-cli.desktop" "$DESKTOP_URL" || true
 ### ESCALATE ONCE ###
 log "Requesting privileges to install system-wide"
 
+# Save script to temp file if running from pipe
+if [[ ! -f "$0" ]] || [[ "$0" == "/dev/fd/"* ]] || [[ "$0" == "/proc/"* ]]; then
+  SCRIPT_PATH=$(mktemp)
+  cat > "$SCRIPT_PATH"
+  chmod +x "$SCRIPT_PATH"
+  trap "rm -f '$SCRIPT_PATH'" EXIT
+else
+  SCRIPT_PATH="$(realpath "$0")"
+fi
+
 if command -v sudo >/dev/null; then
-  exec sudo bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR"
+  exec sudo bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR" "$SCRIPT_PATH"
 elif command -v systemd-run >/dev/null; then
   exec systemd-run --quiet --pipe --wait --pty \
-    bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR"
+    bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR" "$SCRIPT_PATH"
 elif command -v doas >/dev/null; then
-  exec doas bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR"
+  exec doas bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR" "$SCRIPT_PATH"
 else
   die "No supported privilege escalation method found"
 fi
