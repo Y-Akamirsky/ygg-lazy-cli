@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+
+# If running from pipe, save to temp file and re-execute
+if [[ ! -f "$0" ]] || [[ "$0" == "bash" ]] || [[ "$0" == "/dev/fd/"* ]] || [[ "$0" == "/proc/"* ]] || [[ "$0" == "-bash" ]]; then
+  if [[ "${REEXEC_DONE:-}" != "1" ]]; then
+    TEMP_SCRIPT=$(mktemp)
+    cat > "$TEMP_SCRIPT"
+    chmod +x "$TEMP_SCRIPT"
+    export REEXEC_DONE=1
+    exec bash "$TEMP_SCRIPT" "$@"
+  fi
+fi
+
 set -euo pipefail
 
 ### CONFIG ###
@@ -10,7 +22,6 @@ PREFIX="/usr/local"
 BIN_PATH="$PREFIX/bin/$APP_NAME"
 ICON_PATH="$PREFIX/share/icons/ygglazycli.svg"
 DESKTOP_PATH="/usr/share/applications/ygg-lazy-cli.desktop"
-
 
 REAL_USER="${SUDO_USER:-$USER}"
 REAL_HOME="$(getent passwd "$REAL_USER" | cut -d: -f6)"
@@ -101,6 +112,10 @@ UNINSTALL_EOF
     update-desktop-database /usr/share/applications || true
 
   log "Installation complete"
+
+  # Clean up temp script if it was created from pipe
+  [[ -n "${TEMP_SCRIPT_CLEANUP:-}" ]] && rm -f "$TEMP_SCRIPT_CLEANUP"
+
   exit 0
 fi
 
@@ -147,24 +162,25 @@ curl -fsSL -o "$CACHE_DIR/ygglazycli.svg" "$ICON_URL" || true
 curl -fsSL -o "$CACHE_DIR/ygg-lazy-cli.desktop" "$DESKTOP_URL" || true
 
 ### ESCALATE ONCE ###
-log "Requesting privileges to install system-wide"
+SCRIPT_PATH="$(realpath "$0")"
 
-# Save script to temp file if running from pipe
-if [[ ! -f "$0" ]] || [[ "$0" == "/dev/fd/"* ]] || [[ "$0" == "/proc/"* ]]; then
-  SCRIPT_PATH=$(mktemp)
-  cat > "$SCRIPT_PATH"
-  chmod +x "$SCRIPT_PATH"
-  trap "rm -f '$SCRIPT_PATH'" EXIT
-else
-  SCRIPT_PATH="$(realpath "$0")"
+# If already root, just run install phase directly
+if [[ $EUID -eq 0 ]]; then
+  log "Running with root privileges"
+  exec bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR" "$SCRIPT_PATH"
 fi
 
+log "Requesting privileges to install system-wide"
+
 if command -v sudo >/dev/null; then
-  exec sudo bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR" "$SCRIPT_PATH"
+  export TEMP_SCRIPT_CLEANUP="$SCRIPT_PATH"
+  exec sudo -E bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR" "$SCRIPT_PATH"
 elif command -v systemd-run >/dev/null; then
+  export TEMP_SCRIPT_CLEANUP="$SCRIPT_PATH"
   exec systemd-run --quiet --pipe --wait --pty \
     bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR" "$SCRIPT_PATH"
 elif command -v doas >/dev/null; then
+  export TEMP_SCRIPT_CLEANUP="$SCRIPT_PATH"
   exec doas bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR" "$SCRIPT_PATH"
 else
   die "No supported privilege escalation method found"
