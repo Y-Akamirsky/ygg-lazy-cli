@@ -42,7 +42,7 @@ ygg-lazy-cli --help
 ### Linux
 - **Open** a terminal (yep, again terminal), and copy paste command below.
     ```bash
-    curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/install.sh | sudo bash
+    curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/install.sh | bash
     ```
 - **Press** Enter.
 - **Wait** for compilation - the program will be built on your device for maximum compatibility!

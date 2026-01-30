@@ -37,19 +37,6 @@ sudo ygg-lazy-cli-uninstall
 
 ## Troubleshooting
 
-### Go doesn't install automatically
-
-```bash
-# Install Go manually via 'g' utility if your distribution doesn't provide it or the version in the repository is outdated
-curl -sSL https://git.io/g-install | sh -s
-source ~/.bashrc
-g install latest
-```
-```bash
-# Then retry installation
-curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/install.sh | sudo bash
-```
-
 ### Missing git
 
 ```bash

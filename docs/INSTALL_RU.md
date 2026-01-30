@@ -3,7 +3,7 @@
 ## Быстрая установка
 
 ```bash
-curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/install.sh | sudo bash
+curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/install.sh | bash
 ```
 
 **Примечание:** Установка займёт 1-5 минут, так как программа компилируется на вашем устройстве. Это обеспечивает совместимость со всеми дистрибутивами.
@@ -36,19 +36,6 @@ sudo ygg-lazy-cli-uninstall
 ```
 
 ## Решение проблем
-
-### Go не устанавливается автоматически
-
-```bash
-# Установите Go вручную через утилиту 'g' если ваш дистрибутив не поставляет его или версия в репозитории устарела
-curl -sSL https://git.io/g-install | sh -s
-source ~/.bashrc
-g install latest
-```
-```bash
-# Затем повторите установку
-curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/install.sh | sudo bash
-```
 
 ### Нет git
 
