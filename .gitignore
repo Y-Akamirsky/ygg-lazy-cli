@@ -8,6 +8,7 @@ ygg-lazy-cli
 *.exe
 build.sh
 build/
+.goreleaser.yaml
 
 # IDE
 .vscode/
