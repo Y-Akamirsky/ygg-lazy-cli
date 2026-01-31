@@ -63,21 +63,65 @@ curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/uninsta
 ```
     
 ### MacOS
-- Coming soon...
-    
-### BSD
-- Coming soon...
-    
-## What's New in v0.1.5
 
-- ✨ Enhanced peer testing with advanced metrics
-- 🔧 New "Check Active Peers Status" and "Remove Dead Peers" features
-- 🌐 Fixed IPv6 address parsing
-- 📦 Auto-generated uninstaller
-- ℹ️ `--version` and `--help` flags
-- 📚 Comprehensive documentation (INSTALL.md, CHANGELOG.md, MIGRATION.md)
+#### Option 1: Homebrew (Recommended)
+```bash
+brew tap Y-Akamirsky/ygg-lazy-cli
+brew install ygg-lazy-cli
+sudo ygg-lazy-cli
+```
 
-See [CHANGELOG.md](CHANGELOG.md) for full details.
+#### Option 2: Download Binary
+1. **Download** the latest release for your Mac:
+   - **Intel Mac**: `ygg-lazy-cli-darwin-amd64`
+   - **Apple Silicon (M1/M2/M3)**: `ygg-lazy-cli-darwin-arm64`
+   
+   From [Releases](https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest)
+
+2. **Remove quarantine attribute** (macOS security):
+   ```bash
+   xattr -d com.apple.quarantine ygg-lazy-cli-darwin-*
+   ```
+
+3. **Make executable and install**:
+   ```bash
+   chmod +x ygg-lazy-cli-darwin-*
+   sudo mv ygg-lazy-cli-darwin-* /usr/local/bin/ygg-lazy-cli
+   ```
+
+4. **Run**:
+   ```bash
+   sudo ygg-lazy-cli
+   ```
+
+> See [Installation Guide](docs/INSTALL.md) for troubleshooting.
+    
+### BSD (FreeBSD, OpenBSD, NetBSD)
+1. **Download** the latest release for your BSD system:
+   - **FreeBSD**: `ygg-lazy-cli-freebsd-amd64`
+   - **OpenBSD**: `ygg-lazy-cli-openbsd-amd64`
+   - **NetBSD**: `ygg-lazy-cli-netbsd-amd64`
+   
+   From [Releases](https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest)
+
+2. **Make executable and install**:
+   ```bash
+   chmod +x ygg-lazy-cli-*-amd64
+   # FreeBSD/NetBSD
+   sudo mv ygg-lazy-cli-*-amd64 /usr/local/bin/ygg-lazy-cli
+   # OpenBSD
+   doas mv ygg-lazy-cli-*-amd64 /usr/local/bin/ygg-lazy-cli
+   ```
+
+3. **Run**:
+   ```bash
+   # FreeBSD/NetBSD
+   sudo ygg-lazy-cli
+   # OpenBSD
+   doas ygg-lazy-cli
+   ```
+
+> See [Installation Guide](docs/INSTALL.md) for pkg/ports installation details.
 
 ## Contribute
 - Yo! Pull-requests & issues are welcome! Please open an issue if you have problems with YggLazy CLI.
