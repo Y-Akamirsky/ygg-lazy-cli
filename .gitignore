@@ -2,6 +2,7 @@
 DEVNOTES.md
 *.swp
 *~
+yggdrasil.conf.schema
 
 # Build artifacts
 ygg-lazy-cli
@@ -14,3 +15,4 @@ dist/
 # IDE
 .vscode/
 .idea/
+.continueignore

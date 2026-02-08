@@ -71,6 +71,7 @@ type Peer struct {
 func main() {
 	// Parse flags first to allow --version without sudo
 	installFlag := flag.Bool("ygginstall", false, "Install Yggdrasil automatically")
+	installFlagShort := flag.Bool("i", false, "Install Yggdrasil automatically (shorthand)")
 	versionFlag := flag.Bool("version", false, "Show version information")
 	versionFlagShort := flag.Bool("v", false, "Show version information (shorthand)")
 	helpFlag := flag.Bool("help", false, "Show help information")
@@ -80,15 +81,15 @@ func main() {
 	flag.Usage = func() {
 		fmt.Printf("YggLazy-cli version %s - Lazy way to configure Yggdrasil Network!\n\n", version)
 		fmt.Println("USAGE:")
-		fmt.Printf("  %s [OPTIONS]\n\n", "ygg-lazy-cli")
+		fmt.Printf("  %s [OPTIONS]\n\n", "ygglazy")
 		fmt.Println("OPTIONS:")
 		fmt.Println("  -h, --help         Show this help message")
 		fmt.Println("  -v, --version      Show version information")
-		fmt.Println("  --ygginstall       Install Yggdrasil automatically")
+		fmt.Println("  -i, --ygginstall   Install Yggdrasil automatically")
 		fmt.Println("\nEXAMPLES:")
-		fmt.Println("  sudo ygg-lazy-cli                 # Start interactive configurator")
-		fmt.Println("  sudo ygg-lazy-cli --ygginstall    # Auto-install Yggdrasil")
-		fmt.Println("  ygg-lazy-cli --version            # Show version (no sudo needed)")
+		fmt.Println("  sudo ygglazy                 # Start interactive configurator")
+		fmt.Println("  sudo ygglazy --ygginstall    # Auto-install Yggdrasil")
+		fmt.Println("  ygglazy --version            # Show version (no sudo needed)")
 		fmt.Println("\nFor more information, visit:")
 		fmt.Println("  https://github.com/Y-Akamirsky/ygg-lazy-cli")
 	}
@@ -103,7 +104,7 @@ func main() {
 
 	// Handle Version Flag (no admin required)
 	if *versionFlag || *versionFlagShort {
-		fmt.Printf("YggLazy-cli version %s\n", version)
+		fmt.Printf("YggLazy version %s\n", version)
 		fmt.Printf("Built with Go %s\n", runtime.Version())
 		fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 		return
@@ -116,6 +117,11 @@ func main() {
 
 	// Handle Install Flag
 	if *installFlag {
+		installYggdrasil()
+		return
+	}
+
+	if *installFlagShort {
 		installYggdrasil()
 		return
 	}

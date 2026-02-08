@@ -14,7 +14,7 @@ fi
 set -euo pipefail
 
 ### CONFIG ###
-APP_NAME="ygg-lazy-cli"
+APP_NAME="ygglazy"
 REPO="Y-Akamirsky/ygg-lazy-cli"
 GO_VERSION="1.25.6"
 
@@ -45,6 +45,18 @@ cleanup_on_error() {
 }
 trap cleanup_on_error ERR
 
+### CLEANUP PHASE ###
+cleanup_old_bin() {
+  if [ -f /usr/local/bin/ygg-lazy-cli ]; then
+    echo "Removing old binary (overcomplicated name)..."
+    rm /usr/local/bin/ygg-lazy-cli
+  fi
+  if [ -f /usr/local/bin/ygg-lazy-cli-uninstall ]; then
+    echo "Removing old uninstaller (overcomplicated name)..."
+    rm /usr/local/bin/ygg-lazy-cli-uninstall
+  fi
+}
+
 ### ROOT ESCALATION (INSTALL PHASE) ###
 if [[ "${1:-}" == "--install" ]]; then
   [[ $EUID -eq 0 ]] || die "Install phase requires root"
@@ -66,7 +78,7 @@ if [[ "${1:-}" == "--install" ]]; then
 
   # Generate uninstall script
   log "Creating uninstaller"
-  cat > /usr/local/bin/ygg-lazy-cli-uninstall << 'UNINSTALL_EOF'
+  cat > /usr/local/bin/ygglazy-uninstall << 'UNINSTALL_EOF'
 #!/bin/bash
 
 # Uninstaller for YggLazy-cli
@@ -80,8 +92,12 @@ echo "=== Uninstalling YggLazy-cli ==="
 
 # Remove binary
 if [ -f /usr/local/bin/ygg-lazy-cli ]; then
-  echo "Removing binary..."
+  echo "Removing old binary..."
   rm /usr/local/bin/ygg-lazy-cli
+fi
+if [ -f /usr/local/bin/ygglazy-uninstall ]; then
+  echo "Removing binary..."
+  rm /usr/local/bin/ygglazy
 fi
 
 # Remove icon
@@ -101,12 +117,12 @@ update-desktop-database /usr/share/applications/ 2>/dev/null
 
 # Remove this uninstaller
 echo "Removing uninstaller..."
-rm /usr/local/bin/ygg-lazy-cli-uninstall
+rm /usr/local/bin/ygglazy-uninstall
 
 echo "Done! YggLazy-cli has been uninstalled."
 UNINSTALL_EOF
 
-  chmod +x /usr/local/bin/ygg-lazy-cli-uninstall
+  chmod +x /usr/local/bin/ygglazy-uninstall
 
   command -v update-desktop-database >/dev/null && \
     update-desktop-database /usr/share/applications || true

@@ -17,13 +17,13 @@
 
 ```bash
 # Check version (no sudo needed)
-ygg-lazy-cli --version
+ygglazy --version
 
 # Run configurator
-sudo ygg-lazy-cli
+sudo ygglazy
 
 # Get help
-ygg-lazy-cli --help
+ygglazy --help
 ```
 
 ## Documentation
@@ -35,7 +35,7 @@ ygg-lazy-cli --help
 ## How to get utility:
 
 ### Windows
-* **Download** latest "ygg-lazy-cli-VER-ARCH.exe" for your cpu architecture from [Releases](https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest)
+* **Download** latest "ygglazy-VER-ARCH.exe" for your cpu architecture from [Releases](https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest)
 * **Start** executable as Administrator.
 * **Use** it!
     
@@ -54,7 +54,7 @@ ygg-lazy-cli --help
 #### Uninstalling on Linux
 - The installer automatically creates an uninstaller. **To remove YggLazy-cli:**
 ```bash
-sudo ygg-lazy-cli-uninstall
+sudo ygglazy-uninstall
 ```
 
 - **Or** you can use the standalone uninstall script:
@@ -67,58 +67,58 @@ curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/uninsta
 #### Option 1: Homebrew (Recommended)
 ```bash
 brew tap Y-Akamirsky/ygg-lazy-cli
-brew install ygg-lazy-cli
-sudo ygg-lazy-cli
+brew install ygglazy
+sudo ygglazy
 ```
 
 #### Option 2: Download Binary
 1. **Download** the latest release for your Mac:
-   - **Intel Mac**: `ygg-lazy-cli-darwin-amd64`
-   - **Apple Silicon (M1/M2/M3)**: `ygg-lazy-cli-darwin-arm64`
+   - **Intel Mac**: `ygglazy-darwin-amd64`
+   - **Apple Silicon**: `ygglazy-darwin-arm64`
    
    From [Releases](https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest)
 
 2. **Remove quarantine attribute** (macOS security):
    ```bash
-   xattr -d com.apple.quarantine ygg-lazy-cli-darwin-*
+   xattr -d com.apple.quarantine ygglazy-darwin-*
    ```
 
 3. **Make executable and install**:
    ```bash
-   chmod +x ygg-lazy-cli-darwin-*
-   sudo mv ygg-lazy-cli-darwin-* /usr/local/bin/ygg-lazy-cli
+   chmod +x ygglazy-darwin-*
+   sudo mv ygglazy-darwin-* /usr/local/bin/ygglazy
    ```
 
 4. **Run**:
    ```bash
-   sudo ygg-lazy-cli
+   sudo ygglazy
    ```
 
 > See [Installation Guide](docs/INSTALL.md) for troubleshooting.
     
 ### BSD (FreeBSD, OpenBSD, NetBSD)
 1. **Download** the latest release for your BSD system:
-   - **FreeBSD**: `ygg-lazy-cli-freebsd-amd64`
-   - **OpenBSD**: `ygg-lazy-cli-openbsd-amd64`
-   - **NetBSD**: `ygg-lazy-cli-netbsd-amd64`
+   - **FreeBSD**: `ygglazy-freebsd-amd64`
+   - **OpenBSD**: `ygglazy-openbsd-amd64`
+   - **NetBSD**: `ygglazy-netbsd-amd64`
    
    From [Releases](https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest)
 
 2. **Make executable and install**:
    ```bash
-   chmod +x ygg-lazy-cli-*-amd64
+   chmod +x ygglazy-*-amd64
    # FreeBSD/NetBSD
-   sudo mv ygg-lazy-cli-*-amd64 /usr/local/bin/ygg-lazy-cli
+   sudo mv ygglazy-*-amd64 /usr/local/bin/ygglazy
    # OpenBSD
-   doas mv ygg-lazy-cli-*-amd64 /usr/local/bin/ygg-lazy-cli
+   doas mv ygglazy-*-amd64 /usr/local/bin/ygglazy
    ```
 
 3. **Run**:
    ```bash
    # FreeBSD/NetBSD
-   sudo ygg-lazy-cli
+   sudo ygglazy
    # OpenBSD
-   doas ygg-lazy-cli
+   doas ygglazy
    ```
 
 > See [Installation Guide](docs/INSTALL.md) for pkg/ports installation details.

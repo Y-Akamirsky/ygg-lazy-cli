@@ -22,12 +22,12 @@ curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/install
 
 ```bash
 brew tap Y-Akamirsky/ygg-lazy-cli
-brew install ygg-lazy-cli
+brew install ygglazy
 ```
 
 **Запуск:**
 ```bash
-sudo ygg-lazy-cli
+sudo ygglazy
 ```
 
 Вот и всё! Homebrew всё настраивает автоматически, включая зависимости и PATH.
@@ -35,27 +35,27 @@ sudo ygg-lazy-cli
 ### Вариант 2: Скачать готовый бинарник
 
 1. **Скачайте** подходящий бинарник для вашего Mac:
-   - **Intel Mac**: Скачайте `ygg-lazy-cli-darwin-amd64`
-   - **Apple Silicon (M1/M2/M3)**: Скачайте `ygg-lazy-cli-darwin-arm64`
+   - **Intel Mac**: Скачайте `ygglazy-darwin-amd64`
+   - **Apple Silicon**: Скачайте `ygglazy-darwin-arm64`
    
    Из [Releases](https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest)
 
 2. **Снимите атрибут карантина macOS**:
    ```bash
-   xattr -d com.apple.quarantine ~/Downloads/ygg-lazy-cli-darwin-*
+   xattr -d com.apple.quarantine ~/Downloads/ygglazy-darwin-*
    ```
    
    > **Зачем?** macOS помечает скачанные файлы как помещённые в карантин. Эта команда снимает ограничение.
 
 3. **Установите**:
    ```bash
-   chmod +x ~/Downloads/ygg-lazy-cli-darwin-*
-   sudo mv ~/Downloads/ygg-lazy-cli-darwin-* /usr/local/bin/ygg-lazy-cli
+   chmod +x ~/Downloads/ygglazy-darwin-*
+   sudo mv ~/Downloads/ygglazy-darwin-* /usr/local/bin/ygglazy
    ```
 
 4. **Запустите**:
    ```bash
-   sudo ygg-lazy-cli
+   sudo ygglazy
    ```
 
 ### Вариант 3: Сборка из исходников
@@ -67,10 +67,10 @@ brew install go git
 # Клонируйте и соберите
 git clone https://github.com/Y-Akamirsky/ygg-lazy-cli.git
 cd ygg-lazy-cli
-go build -ldflags="-s -w" -trimpath -o ygg-lazy-cli
+go build -ldflags="-s -w" -trimpath -o ygglazy
 
 # Установите
-sudo mv ygg-lazy-cli /usr/local/bin/
+sudo mv ygglazy /usr/local/bin/
 ```
 
 ### macOS - Решение проблем
@@ -78,7 +78,7 @@ sudo mv ygg-lazy-cli /usr/local/bin/
 **"Невозможно открыть, так как разработчик не может быть проверен"**
 ```bash
 # Снимите атрибут карантина
-xattr -d com.apple.quarantine /usr/local/bin/ygg-lazy-cli
+xattr -d com.apple.quarantine /usr/local/bin/ygglazy
 ```
 
 **Команда не найдена после установки**
@@ -102,13 +102,13 @@ source ~/.zshrc
 
 2. **Установите**:
    ```bash
-   chmod +x ygg-lazy-cli-freebsd-amd64
-   sudo mv ygg-lazy-cli-freebsd-amd64 /usr/local/bin/ygg-lazy-cli
+   chmod +x ygglazy-freebsd-amd64
+   sudo mv ygglazy-freebsd-amd64 /usr/local/bin/ygglazy
    ```
 
 3. **Запустите**:
    ```bash
-   sudo ygg-lazy-cli
+   sudo ygglazy
    ```
 
 **Альтернатива: Сборка из исходников**
@@ -119,10 +119,10 @@ sudo pkg install go git
 # Клонируйте и соберите
 git clone https://github.com/Y-Akamirsky/ygg-lazy-cli.git
 cd ygg-lazy-cli
-go build -ldflags="-s -w" -trimpath -o ygg-lazy-cli
+go build -ldflags="-s -w" -trimpath -o ygglazy
 
 # Установите
-sudo mv ygg-lazy-cli /usr/local/bin/
+sudo mv ygglazy /usr/local/bin/
 ```
 
 ### OpenBSD
@@ -134,13 +134,13 @@ sudo mv ygg-lazy-cli /usr/local/bin/
 
 2. **Установите**:
    ```bash
-   chmod +x ygg-lazy-cli-openbsd-amd64
-   doas mv ygg-lazy-cli-openbsd-amd64 /usr/local/bin/ygg-lazy-cli
+   chmod +x ygglazy-openbsd-amd64
+   doas mv ygglazy-openbsd-amd64 /usr/local/bin/ygglazy
    ```
 
 3. **Запустите**:
    ```bash
-   doas ygg-lazy-cli
+   doas ygglazy
    ```
 
 **Альтернатива: Сборка из исходников**
@@ -151,10 +151,10 @@ doas pkg_add go git
 # Клонируйте и соберите
 git clone https://github.com/Y-Akamirsky/ygg-lazy-cli.git
 cd ygg-lazy-cli
-go build -ldflags="-s -w" -trimpath -o ygg-lazy-cli
+go build -ldflags="-s -w" -trimpath -o ygglazy
 
 # Установите
-doas mv ygg-lazy-cli /usr/local/bin/
+doas mv ygglazy /usr/local/bin/
 ```
 
 ### NetBSD
@@ -166,15 +166,15 @@ doas mv ygg-lazy-cli /usr/local/bin/
 
 2. **Установите**:
    ```bash
-   chmod +x ygg-lazy-cli-netbsd-amd64
-   su -c 'mv ygg-lazy-cli-netbsd-amd64 /usr/local/bin/ygg-lazy-cli'
+   chmod +x ygglazy-netbsd-amd64
+   su -c 'mv ygglazy-netbsd-amd64 /usr/local/bin/ygglazy'
    ```
 
 3. **Запустите**:
    ```bash
-   su -c ygg-lazy-cli
+   su -c ygglazy
    # или
-   sudo ygg-lazy-cli
+   sudo ygglazy
    ```
 
 **Альтернатива: Сборка из исходников**
@@ -185,15 +185,15 @@ pkgin install go git
 # Клонируйте и соберите (от пользователя)
 git clone https://github.com/Y-Akamirsky/ygg-lazy-cli.git
 cd ygg-lazy-cli
-go build -ldflags="-s -w" -trimpath -o ygg-lazy-cli
+go build -ldflags="-s -w" -trimpath -o ygglazy
 
 # Установите (от root)
-su -c 'mv ygg-lazy-cli /usr/local/bin/'
+su -c 'mv ygglazy /usr/local/bin/'
 ```
 
 ## Windows - Установка
 
-1. **Скачайте** `ygg-lazy-cli-windows-amd64.exe` или `ygg-lazy-cli-windows-386.exe` из [Releases](https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest)
+1. **Скачайте** `ygglazy-windows-amd64.exe` или `ygglazy-windows-386.exe` из [Releases](https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest)
 
 2. **Запустите от имени администратора** (правый клик → "Запустить от имени администратора")
 
@@ -204,23 +204,23 @@ su -c 'mv ygg-lazy-cli /usr/local/bin/'
 ### Linux/BSD
 ```bash
 # Запустить (требуется root)
-sudo ygg-lazy-cli        # Linux, FreeBSD, NetBSD
-doas ygg-lazy-cli        # OpenBSD
+sudo ygglazy        # Linux, FreeBSD, NetBSD
+doas ygglazy        # OpenBSD
 
 # Показать версию (root не нужен)
-ygg-lazy-cli --version
+ygglazy --version
 
 # Справка
-ygg-lazy-cli --help
+ygglazy --help
 ```
 
 ### macOS
 ```bash
 # Запустить (требуется sudo)
-sudo ygg-lazy-cli
+sudo ygglazy
 
 # Показать версию
-ygg-lazy-cli --version
+ygglazy --version
 ```
 
 ### Windows
@@ -231,13 +231,13 @@ ygg-lazy-cli --version
 
 ### Linux (установлено через скрипт)
 ```bash
-sudo ygg-lazy-cli-uninstall
+sudo ygglazy-uninstall
 ```
 
 ### macOS/BSD (ручная установка)
 ```bash
-sudo rm /usr/local/bin/ygg-lazy-cli        # FreeBSD, NetBSD, macOS
-doas rm /usr/local/bin/ygg-lazy-cli        # OpenBSD
+sudo rm /usr/local/bin/ygglazy        # FreeBSD, NetBSD, macOS
+doas rm /usr/local/bin/ygglazy        # OpenBSD
 ```
 
 ### Windows
@@ -319,12 +319,12 @@ su -c 'pkgin install go'
 # 2. Скачайте и скомпилируйте
 git clone https://github.com/Y-Akamirsky/ygg-lazy-cli.git
 cd ygg-lazy-cli
-go build -ldflags="-s -w" -trimpath -o ygg-lazy-cli
+go build -ldflags="-s -w" -trimpath -o ygglazy
 
 # 3. Установите
-sudo cp ygg-lazy-cli /usr/local/bin/        # Linux, macOS, FreeBSD, NetBSD
-doas cp ygg-lazy-cli /usr/local/bin/        # OpenBSD
-sudo chmod +x /usr/local/bin/ygg-lazy-cli
+sudo cp ygglazy /usr/local/bin/        # Linux, macOS, FreeBSD, NetBSD
+doas cp ygglazy /usr/local/bin/        # OpenBSD
+sudo chmod +x /usr/local/bin/ygglazy
 ```
 
 ## Особенности платформ

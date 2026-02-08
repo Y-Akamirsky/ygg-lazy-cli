@@ -22,12 +22,12 @@ curl -sL https://raw.githubusercontent.com/Y-Akamirsky/ygg-lazy-cli/main/install
 
 ```bash
 brew tap Y-Akamirsky/ygg-lazy-cli
-brew install ygg-lazy-cli
+brew install ygglazy
 ```
 
 **Run:**
 ```bash
-sudo ygg-lazy-cli
+sudo ygglazy
 ```
 
 That's it! Homebrew handles everything including dependencies and PATH setup.
@@ -35,27 +35,27 @@ That's it! Homebrew handles everything including dependencies and PATH setup.
 ### Option 2: Download Pre-built Binary
 
 1. **Download** the appropriate binary for your Mac:
-   - **Intel Mac**: Download `ygg-lazy-cli-darwin-amd64`
-   - **Apple Silicon (M1/M2/M3)**: Download `ygg-lazy-cli-darwin-arm64`
+   - **Intel Mac**: Download `ygglazy-darwin-amd64`
+   - **Apple Silicon (M1/M2/M3)**: Download `ygglazy-darwin-arm64`
    
    From [Releases](https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest)
 
 2. **Remove macOS quarantine attribute**:
    ```bash
-   xattr -d com.apple.quarantine ~/Downloads/ygg-lazy-cli-darwin-*
+   xattr -d com.apple.quarantine ~/Downloads/ygglazy-darwin-*
    ```
    
    > **Why?** macOS marks downloaded files as quarantined. This command removes the restriction.
 
 3. **Install**:
    ```bash
-   chmod +x ~/Downloads/ygg-lazy-cli-darwin-*
-   sudo mv ~/Downloads/ygg-lazy-cli-darwin-* /usr/local/bin/ygg-lazy-cli
+   chmod +x ~/Downloads/ygglazy-darwin-*
+   sudo mv ~/Downloads/ygglazy-darwin-* /usr/local/bin/ygglazy
    ```
 
 4. **Run**:
    ```bash
-   sudo ygg-lazy-cli
+   sudo ygglazy
    ```
 
 ### Option 3: Build from Source
@@ -67,10 +67,10 @@ brew install go git
 # Clone and build
 git clone https://github.com/Y-Akamirsky/ygg-lazy-cli.git
 cd ygg-lazy-cli
-go build -ldflags="-s -w" -trimpath -o ygg-lazy-cli
+go build -ldflags="-s -w" -trimpath -o ygglazy
 
 # Install
-sudo mv ygg-lazy-cli /usr/local/bin/
+sudo mv ygglazy /usr/local/bin/
 ```
 
 ### macOS Troubleshooting
@@ -78,7 +78,7 @@ sudo mv ygg-lazy-cli /usr/local/bin/
 **"Cannot be opened because the developer cannot be verified"**
 ```bash
 # Remove quarantine attribute
-xattr -d com.apple.quarantine /usr/local/bin/ygg-lazy-cli
+xattr -d com.apple.quarantine /usr/local/bin/ygglazy
 ```
 
 **Command not found after install**
@@ -97,18 +97,18 @@ source ~/.zshrc
 
 1. **Download**:
    ```bash
-   fetch https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest/download/ygg-lazy-cli-freebsd-amd64
+   fetch https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest/download/ygglazy-freebsd-amd64
    ```
 
 2. **Install**:
    ```bash
-   chmod +x ygg-lazy-cli-freebsd-amd64
-   sudo mv ygg-lazy-cli-freebsd-amd64 /usr/local/bin/ygg-lazy-cli
+   chmod +x ygglazy-freebsd-amd64
+   sudo mv ygglazy-freebsd-amd64 /usr/local/bin/ygglazy
    ```
 
 3. **Run**:
    ```bash
-   sudo ygg-lazy-cli
+   sudo ygglazy
    ```
 
 **Alternative: Build from source**
@@ -119,28 +119,28 @@ sudo pkg install go git
 # Clone and build
 git clone https://github.com/Y-Akamirsky/ygg-lazy-cli.git
 cd ygg-lazy-cli
-go build -ldflags="-s -w" -trimpath -o ygg-lazy-cli
+go build -ldflags="-s -w" -trimpath -o ygglazy
 
 # Install
-sudo mv ygg-lazy-cli /usr/local/bin/
+sudo mv ygglazy /usr/local/bin/
 ```
 
 ### OpenBSD
 
 1. **Download**:
    ```bash
-   ftp https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest/download/ygg-lazy-cli-openbsd-amd64
+   ftp https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest/download/ygglazy-openbsd-amd64
    ```
 
 2. **Install**:
    ```bash
-   chmod +x ygg-lazy-cli-openbsd-amd64
-   doas mv ygg-lazy-cli-openbsd-amd64 /usr/local/bin/ygg-lazy-cli
+   chmod +x ygglazy-openbsd-amd64
+   doas mv ygglazy-openbsd-amd64 /usr/local/bin/ygglazy
    ```
 
 3. **Run**:
    ```bash
-   doas ygg-lazy-cli
+   doas ygglazy
    ```
 
 **Alternative: Build from source**
@@ -151,30 +151,30 @@ doas pkg_add go git
 # Clone and build
 git clone https://github.com/Y-Akamirsky/ygg-lazy-cli.git
 cd ygg-lazy-cli
-go build -ldflags="-s -w" -trimpath -o ygg-lazy-cli
+go build -ldflags="-s -w" -trimpath -o ygglazy
 
 # Install
-doas mv ygg-lazy-cli /usr/local/bin/
+doas mv ygglazy /usr/local/bin/
 ```
 
 ### NetBSD
 
 1. **Download**:
    ```bash
-   ftp https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest/download/ygg-lazy-cli-netbsd-amd64
+   ftp https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest/download/ygglazy-openbsd-amd64
    ```
 
 2. **Install**:
    ```bash
-   chmod +x ygg-lazy-cli-netbsd-amd64
-   su -c 'mv ygg-lazy-cli-netbsd-amd64 /usr/local/bin/ygg-lazy-cli'
+   chmod +x ygglazy-openbsd-amd64
+   su -c 'mv ygglazy-openbsd-amd64 /usr/local/bin/ygglazy'
    ```
 
 3. **Run**:
    ```bash
-   su -c ygg-lazy-cli
+   su -c ygglazy
    # or
-   sudo ygg-lazy-cli
+   sudo ygglazy
    ```
 
 **Alternative: Build from source**
@@ -188,12 +188,12 @@ cd ygg-lazy-cli
 go build -ldflags="-s -w" -trimpath -o ygg-lazy-cli
 
 # Install (as root)
-su -c 'mv ygg-lazy-cli /usr/local/bin/'
+su -c 'mv ygglazy /usr/local/bin/'
 ```
 
 ## Windows Installation
 
-1. **Download** `ygg-lazy-cli-windows-amd64.exe` or `ygg-lazy-cli-windows-386.exe` from [Releases](https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest)
+1. **Download** `ygglazy-windows-amd64.exe` or `ygglazy-windows-386.exe` from [Releases](https://github.com/Y-Akamirsky/ygg-lazy-cli/releases/latest)
 
 2. **Run as Administrator** (right-click → "Run as administrator")
 
@@ -204,23 +204,23 @@ su -c 'mv ygg-lazy-cli /usr/local/bin/'
 ### Linux/BSD
 ```bash
 # Run (requires root)
-sudo ygg-lazy-cli        # Linux, FreeBSD, NetBSD
-doas ygg-lazy-cli        # OpenBSD
+sudo ygglazy        # Linux, FreeBSD, NetBSD
+doas ygglazy        # OpenBSD
 
 # Show version (no root needed)
-ygg-lazy-cli --version
+ygglazy --version
 
 # Show help
-ygg-lazy-cli --help
+ygglazy --help
 ```
 
 ### macOS
 ```bash
 # Run (requires sudo)
-sudo ygg-lazy-cli
+sudo ygglazy
 
 # Show version
-ygg-lazy-cli --version
+ygglazy --version
 ```
 
 ### Windows
@@ -231,13 +231,13 @@ ygg-lazy-cli --version
 
 ### Linux (installed via script)
 ```bash
-sudo ygg-lazy-cli-uninstall
+sudo ygglazy-uninstall
 ```
 
 ### macOS/BSD (manual install)
 ```bash
-sudo rm /usr/local/bin/ygg-lazy-cli        # FreeBSD, NetBSD, macOS
-doas rm /usr/local/bin/ygg-lazy-cli        # OpenBSD
+sudo rm /usr/local/bin/ygglazy        # FreeBSD, NetBSD, macOS
+doas rm /usr/local/bin/ygglazy        # OpenBSD
 ```
 
 ### Windows
@@ -273,7 +273,7 @@ sudo update-desktop-database /usr/share/applications/
 ### macOS: "developer cannot be verified"
 
 ```bash
-xattr -d com.apple.quarantine /usr/local/bin/ygg-lazy-cli
+xattr -d com.apple.quarantine /usr/local/bin/ygglazy
 ```
 
 ### BSD: Missing dependencies
@@ -319,12 +319,12 @@ su -c 'pkgin install go'
 # 2. Download and compile
 git clone https://github.com/Y-Akamirsky/ygg-lazy-cli.git
 cd ygg-lazy-cli
-go build -ldflags="-s -w" -trimpath -o ygg-lazy-cli
+go build -ldflags="-s -w" -trimpath -o ygglazy
 
 # 3. Install
-sudo cp ygg-lazy-cli /usr/local/bin/        # Linux, macOS, FreeBSD, NetBSD
-doas cp ygg-lazy-cli /usr/local/bin/        # OpenBSD
-sudo chmod +x /usr/local/bin/ygg-lazy-cli
+sudo cp ygglazy /usr/local/bin/        # Linux, macOS, FreeBSD, NetBSD
+doas cp ygglazy /usr/local/bin/        # OpenBSD
+sudo chmod +x /usr/local/bin/ygglazy
 ```
 
 ## Platform-Specific Notes

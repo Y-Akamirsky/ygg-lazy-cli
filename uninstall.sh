@@ -12,7 +12,8 @@ echo "=== Uninstalling YggLazy-cli ==="
 echo ""
 
 # Define file paths
-BINARY="/usr/local/bin/ygg-lazy-cli"
+OLD_BINARY="/usr/local/bin/ygg-lazy-cli"
+BINARY="/usr/local/bin/ygglazy"
 ICON="/usr/local/share/icons/ygglazycli.svg"
 DESKTOP="/usr/share/applications/ygg-lazy-cli.desktop"
 UNINSTALLER="/usr/local/bin/ygg-lazy-cli-uninstall"
@@ -20,6 +21,13 @@ UNINSTALLER="/usr/local/bin/ygg-lazy-cli-uninstall"
 REMOVED_COUNT=0
 
 # Remove binary
+if [ -f "$OLD_BINARY" ]; then
+  echo "✓ Removing old binary: $OLD_BINARY"
+  rm "$OLD_BINARY"
+  REMOVED_COUNT=$((REMOVED_COUNT + 1))
+else
+    echo "- Old binary not found (already removed?): $OLD_BINARY"
+fi
 if [ -f "$BINARY" ]; then
   echo "✓ Removing binary: $BINARY"
   rm "$BINARY"
