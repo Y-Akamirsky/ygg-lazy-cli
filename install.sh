@@ -67,6 +67,8 @@ if [[ "${1:-}" == "--install" ]]; then
 
   [[ -x "$BUILD_DIR/$APP_NAME" ]] || die "Binary not found: $BUILD_DIR/$APP_NAME"
 
+  cleanup_old_bin
+
   log "Installing binary"
   install -Dm755 "$BUILD_DIR/$APP_NAME" "$BIN_PATH"
 
