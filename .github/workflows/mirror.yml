@@ -9,8 +9,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: pixta-dev/repository-mirroring-action@v1
-        with:
-          target_repo_url: "https://codeberg.org/Y-Akamirky/ygg-lazy-cli"
-          ssh_private_key: ${{ secrets.CODEBERG_TOKEN }} 
-          # Если через токен не пойдет, ниже вариант проще
+      - name: Mirror to Codeberg
+        run: |
+          git push --prune --force "https://Y-Akamirky:${{ secrets.CODEBERG_TOKEN }}@codeberg.org/Y-Akamirky/ygg-lazy-cli.git" +refs/heads/*:refs/heads/* +refs/tags/*:refs/tags/*
