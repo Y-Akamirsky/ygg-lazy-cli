@@ -11,6 +11,6 @@ jobs:
           fetch-depth: 0
       - uses: pixta-dev/repository-mirroring-action@v1
         with:
-          target_repo_url: "https://codeberg.org/Y-Akamirky/ygg-lazy-cli.git"
+          target_repo_url: "https://codeberg.org/Y-Akamirky/ygg-lazy-cli"
           ssh_private_key: ${{ secrets.CODEBERG_TOKEN }} 
           # Если через токен не пойдет, ниже вариант проще
