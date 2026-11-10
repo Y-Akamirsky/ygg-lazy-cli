@@ -675,8 +675,7 @@ func autoAddPeers() {
 		toAdd = append(toAdd, ranked[i].URI)
 	}
 
-	confirm := false
-	survey.AskOne(&survey.Confirm{Message: "Confirm adding these peers?"}, &confirm)
+	confirm := askConfirm("Confirm adding these peers?", true)
 	if confirm {
 		addPeersToConfig(toAdd)
 		restartServicePrompt()
@@ -728,8 +727,10 @@ func removePeersMenu() {
 	toRemove := []string{}
 	err := survey.AskOne(&survey.MultiSelect{Message: "Select to Remove:", Options: current}, &toRemove)
 	if err == nil && len(toRemove) > 0 {
-		removePeersFromConfig(toRemove)
-		restartServicePrompt()
+		if askConfirm("Remove selected peers from config?", false) {
+			removePeersFromConfig(toRemove)
+			restartServicePrompt()
+		}
 	}
 }
 
@@ -899,9 +900,7 @@ func showStatus() {
 }
 
 func restartServicePrompt() {
-	r := false
-	survey.AskOne(&survey.Confirm{Message: "Restart Yggdrasil service now?"}, &r)
-	if r {
+	if askConfirm("Restart Yggdrasil service now?", true) {
 		if err := currentPlatform.ManageService("Restart"); err != nil {
 			fmt.Println(red("Restart failed: "), err)
 		} else {
@@ -1201,9 +1200,7 @@ func removeDeadPeers() {
 	}
 	fmt.Println()
 
-	confirm := false
-	survey.AskOne(&survey.Confirm{Message: "Remove these dead peers from config?"}, &confirm)
-	if confirm {
+	if askConfirm("Remove these dead peers from config?", false) {
 		removePeersFromConfig(deadPeersInConfig)
 		fmt.Println(green("\n✓ Dead peers removed from config."))
 		restartServicePrompt()
