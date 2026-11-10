@@ -177,3 +177,9 @@ InterfacePeers: {}
 		t.Fatalf("unexpected config:\n--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
 }
+
+func TestResolveConfigPathRejectsDirectory(t *testing.T) {
+	if _, err := resolveConfigPath(t.TempDir()); err == nil {
+		t.Fatal("expected an error for a directory path")
+	}
+}

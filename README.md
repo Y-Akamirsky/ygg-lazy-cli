@@ -10,6 +10,7 @@
 - 🚀 **Fast peer testing** - Tests 100 peers with 20 concurrent workers
 - 📊 **Advanced metrics** - Latency, jitter, stability scoring
 - 🔧 **Dead peer management** - Automatic detection and removal
+- 📁 **Custom config path** - Use any `yggdrasil.conf` with `--config|-c`
 - 📦 **Easy install/uninstall** - One-command installation with auto-generated uninstaller
 - ℹ️ **Version flags** - `--version` and `--help` support
 
@@ -21,6 +22,9 @@ ygglazy --version
 
 # Run configurator
 sudo ygglazy
+
+# Use a custom config file
+sudo ygglazy --config /path/to/yggdrasil.conf
 
 # Get help
 ygglazy --help

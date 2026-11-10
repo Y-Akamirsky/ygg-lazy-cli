@@ -42,6 +42,7 @@ var (
 	yellow    = color.New(color.FgYellow).SprintFunc()
 
 	detectedConfigPath string
+	configPathExplicit bool
 )
 
 // --- Structures ---
@@ -70,12 +71,15 @@ type Peer struct {
 
 func main() {
 	// Parse flags first to allow --version without sudo
+	var customConfigPath string
 	installFlag := flag.Bool("ygginstall", false, "Install Yggdrasil automatically")
 	installFlagShort := flag.Bool("i", false, "Install Yggdrasil automatically (shorthand)")
 	versionFlag := flag.Bool("version", false, "Show version information")
 	versionFlagShort := flag.Bool("v", false, "Show version information (shorthand)")
 	helpFlag := flag.Bool("help", false, "Show help information")
 	helpFlagShort := flag.Bool("h", false, "Show help information (shorthand)")
+	flag.StringVar(&customConfigPath, "config", "", "Path to yggdrasil.conf")
+	flag.StringVar(&customConfigPath, "c", "", "Path to yggdrasil.conf (shorthand)")
 
 	// Custom usage function
 	flag.Usage = func() {
@@ -83,13 +87,15 @@ func main() {
 		fmt.Println("USAGE:")
 		fmt.Printf("  %s [OPTIONS]\n\n", "ygglazy")
 		fmt.Println("OPTIONS:")
-		fmt.Println("  -h, --help         Show this help message")
-		fmt.Println("  -v, --version      Show version information")
-		fmt.Println("  -i, --ygginstall   Install Yggdrasil automatically")
+		fmt.Println("  -h, --help           Show this help message")
+		fmt.Println("  -v, --version        Show version information")
+		fmt.Println("  -i, --ygginstall     Install Yggdrasil automatically")
+		fmt.Println("  -c, --config PATH    Use a custom yggdrasil.conf path")
 		fmt.Println("\nEXAMPLES:")
-		fmt.Println("  sudo ygglazy                 # Start interactive configurator")
-		fmt.Println("  sudo ygglazy --ygginstall    # Auto-install Yggdrasil")
-		fmt.Println("  ygglazy --version            # Show version (no sudo needed)")
+		fmt.Println("  sudo ygglazy                        # Start interactive configurator")
+		fmt.Println("  sudo ygglazy --ygginstall           # Auto-install Yggdrasil")
+		fmt.Println("  sudo ygglazy -c /path/to/conf       # Use a custom config file")
+		fmt.Println("  ygglazy --version                   # Show version (no sudo needed)")
 		fmt.Println("\nFor more information, visit:")
 		fmt.Println("  https://github.com/Y-Akamirsky/ygg-lazy-cli")
 	}
@@ -113,32 +119,28 @@ func main() {
 	// Check/Request Admin Privileges for other operations
 	currentPlatform.EnsureAdmin()
 
-	detectedConfigPath = currentPlatform.FindConfigPath()
+	// Resolve the config path: explicit --config|-c wins over platform defaults
+	if customConfigPath != "" {
+		path, err := resolveConfigPath(customConfigPath)
+		if err != nil {
+			fmt.Println(red("Invalid config path: "), err)
+			os.Exit(1)
+		}
+		detectedConfigPath = path
+		configPathExplicit = true
+	} else {
+		detectedConfigPath = currentPlatform.FindConfigPath()
+	}
 
 	// Handle Install Flag
-	if *installFlag {
+	if *installFlag || *installFlagShort {
 		installYggdrasil()
 		return
 	}
 
-	if *installFlagShort {
-		installYggdrasil()
-		return
-	}
-
-	// Check if config actually exists on disk
-	if !fileExists(detectedConfigPath) {
-		color.Yellow("Config file not found (%s).", detectedConfigPath)
-		confirm := false
-		survey.AskOne(&survey.Confirm{Message: "Yggdrasil config missing. Install/Generate now?"}, &confirm)
-		if confirm {
-			installYggdrasil()
-			detectedConfigPath = currentPlatform.FindConfigPath()
-		} else {
-			fmt.Println("Exiting.")
-			os.Exit(0)
-		}
-	}
+	// Check installation by the yggdrasil binary, then by config presence
+	ensureInstalled()
+	ensureConfig()
 
 	mainMenu()
 }
@@ -245,6 +247,81 @@ func viewCurrentPeers() {
 
 // --- Logic: Installation ---
 
+// ensureInstalled verifies that the yggdrasil binary is available in PATH
+// instead of relying on the presence of a config file.
+func ensureInstalled() {
+	if yggdrasilInstalled() {
+		return
+	}
+
+	fmt.Println(yellow("Yggdrasil is not installed: no yggdrasil binary found in PATH."))
+	fmt.Println(yellow("Automatic installation is experimental. Installing Yggdrasil separately is recommended."))
+	if !askConfirm("Install Yggdrasil now?", false) {
+		fmt.Println("Exiting.")
+		os.Exit(0)
+	}
+
+	installYggdrasil()
+	if !yggdrasilInstalled() {
+		fmt.Println(red("Yggdrasil installation did not complete. Exiting."))
+		os.Exit(1)
+	}
+}
+
+// ensureConfig checks that the resolved config exists and offers guidance
+// when it is missing.
+func ensureConfig() {
+	if fileExists(detectedConfigPath) {
+		return
+	}
+
+	if configPathExplicit {
+		fmt.Println(red("Config file not found: "), detectedConfigPath)
+		fmt.Println(yellow("Check that the path is correct and that the file exists."))
+		os.Exit(1)
+	}
+
+	printMissingConfigHelp()
+	if !askConfirm("Generate yggdrasil.conf now?", true) {
+		fmt.Println("Exiting.")
+		os.Exit(0)
+	}
+
+	fmt.Println("Generating config...")
+	if err := generateConfig(detectedConfigPath); err != nil {
+		fmt.Println(red("Failed to generate config: "), err)
+		fmt.Printf("%s %s\n", yellow("Generate it manually with:"), configGenCommand(detectedConfigPath))
+		waitEnter()
+		os.Exit(1)
+	}
+	fmt.Println(green("Config generated at " + detectedConfigPath))
+}
+
+func printMissingConfigHelp() {
+	fmt.Println(red("Yggdrasil config not found in the default directory."))
+	fmt.Printf("Expected path: %s\n\n", detectedConfigPath)
+	fmt.Println(yellow("Make sure that yggdrasil.conf is generated:"))
+	fmt.Printf("  %s\n\n", configGenCommand(detectedConfigPath))
+	fmt.Println(yellow("Or specify a different config path with the --config|-c flag, for example:"))
+	fmt.Printf("  %s\n\n", customConfigCommand("/path/to/yggdrasil.conf"))
+}
+
+func configGenCommand(path string) string {
+	prefix := ""
+	if !isWindows {
+		prefix = "sudo "
+	}
+	return fmt.Sprintf("%syggdrasil -genconf > %s", prefix, path)
+}
+
+func customConfigCommand(path string) string {
+	prefix := ""
+	if !isWindows {
+		prefix = "sudo "
+	}
+	return fmt.Sprintf("%sygglazy --config %s", prefix, path)
+}
+
 func installYggdrasil() {
 	fmt.Println(cyan("=== Yggdrasil Installer ==="))
 
@@ -254,26 +331,61 @@ func installYggdrasil() {
 		return
 	}
 
-	detectedConfigPath = currentPlatform.FindConfigPath()
+	// Re-detect the platform default after installation (a package may place
+	// the config in a different location), but never override an explicit path.
+	if !configPathExplicit {
+		detectedConfigPath = currentPlatform.FindConfigPath()
+	}
+
 	if !fileExists(detectedConfigPath) {
 		fmt.Println("Generating config...")
-		cmdName := "yggdrasil"
-		if isWindows {
-			cmdName = `C:\Program Files\Yggdrasil\yggdrasil.exe`
-		}
-
-		// Try to generate
-		out, err := exec.Command(cmdName, "-genconf").Output()
-		if err == nil && len(out) > 0 {
-			dir := filepath.Dir(detectedConfigPath)
-			os.MkdirAll(dir, 0755)
-			os.WriteFile(detectedConfigPath, out, 0644)
-			fmt.Println(green("Config generated at " + detectedConfigPath))
+		if err := generateConfig(detectedConfigPath); err != nil {
+			fmt.Println(red("Failed to generate config automatically: "), err)
+			fmt.Println(yellow("Check if Yggdrasil is in PATH, or generate it manually with:"))
+			fmt.Printf("  %s\n", configGenCommand(detectedConfigPath))
 		} else {
-			fmt.Println(red("Failed to generate config automatically. Check if Yggdrasil is in PATH."))
+			fmt.Println(green("Config generated at " + detectedConfigPath))
 		}
 	}
 	waitEnter()
+}
+
+// yggdrasilBinary resolves the yggdrasil executable via PATH, with a Windows
+// fallback for the default MSI installation directory.
+func yggdrasilBinary() (string, error) {
+	if path, err := exec.LookPath("yggdrasil"); err == nil {
+		return path, nil
+	}
+	if isWindows {
+		path := `C:\Program Files\Yggdrasil\yggdrasil.exe`
+		if fileExists(path) {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("yggdrasil binary not found in PATH")
+}
+
+func yggdrasilInstalled() bool {
+	_, err := yggdrasilBinary()
+	return err == nil
+}
+
+func generateConfig(path string) error {
+	bin, err := yggdrasilBinary()
+	if err != nil {
+		return err
+	}
+	out, err := exec.Command(bin, "-genconf").Output()
+	if err != nil {
+		return fmt.Errorf("yggdrasil -genconf failed: %v", err)
+	}
+	if len(out) == 0 {
+		return fmt.Errorf("yggdrasil -genconf returned empty output")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, out, 0644)
 }
 
 // Helper function to keep code clean (used in Debian/Fedora blocks)
@@ -1177,6 +1289,47 @@ func fileExists(p string) bool {
 		return false
 	}
 	return !info.IsDir()
+}
+
+// resolveConfigPath expands a leading "~" and returns an absolute path.
+func resolveConfigPath(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", fmt.Errorf("path is empty")
+	}
+	if path == "~" || strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		if path == "~" {
+			path = home
+		} else {
+			path = filepath.Join(home, path[2:])
+		}
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	if info, err := os.Stat(abs); err == nil && info.IsDir() {
+		return "", fmt.Errorf("%s is a directory", abs)
+	}
+	return abs, nil
+}
+
+// askConfirm asks a yes/no question and uses the safest logical answer as the
+// default, so a stray Enter does not trigger an unexpected action.
+func askConfirm(message string, defaultValue bool) bool {
+	answer := defaultValue
+	if err := survey.AskOne(&survey.Confirm{Message: message, Default: defaultValue}, &answer); err != nil {
+		if err == terminal.InterruptErr {
+			fmt.Println("Bye!")
+			os.Exit(0)
+		}
+		return false
+	}
+	return answer
 }
 
 func waitEnter() {
