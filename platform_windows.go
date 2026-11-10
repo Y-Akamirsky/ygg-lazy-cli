@@ -20,7 +20,7 @@ func init() {
 
 func (p *WindowsPlatform) EnsureAdmin() {
 	if !amAdminWindows() {
-		fmt.Println(yellow("Administrator privileges required. Relaunching..."))
+		fmt.Println(yellow(T("Administrator privileges required. Relaunching...")))
 		runMeElevated()
 	}
 }
@@ -34,7 +34,7 @@ func (p *WindowsPlatform) FindConfigPath() string {
 }
 
 func (p *WindowsPlatform) Install() error {
-	fmt.Println("Fetching latest release...")
+	fmt.Println(T("Fetching latest release..."))
 
 	// Determine Architecture for Windows
 	arch := runtime.GOARCH
@@ -53,12 +53,12 @@ func (p *WindowsPlatform) Install() error {
 	}
 
 	filename := "yggdrasil_installer.msi"
-	fmt.Printf("Downloading %s (Arch: %s)...\n", url, arch)
+	fmt.Println(T("Downloading %s (Arch: %s)...", url, arch))
 	if err := downloadFile(filename, url); err != nil {
 		return err
 	}
 
-	fmt.Println("Running MSI installer (Admin rights required)...")
+	fmt.Println(T("Running MSI installer (Admin rights required)..."))
 	cmd := exec.Command("msiexec", "/i", filename, "/qb", "/norestart")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -67,7 +67,7 @@ func (p *WindowsPlatform) Install() error {
 	}
 
 	os.Remove(filename)
-	fmt.Println(green("Installation complete."))
+	fmt.Println(green(T("Installation complete.")))
 	return nil
 }
 
@@ -85,9 +85,9 @@ func (p *WindowsPlatform) ManageService(act string) error {
 	case "Disable Autostart":
 		cmd = "Set-Service yggdrasil -StartupType Manual"
 	default:
-		return fmt.Errorf("unknown action: %s", act)
+		return fmt.Errorf("%s: %s", T("unknown action"), act)
 	}
-	fmt.Printf("Executing: %s\n", cmd)
+	fmt.Println(T("Executing: %s", cmd))
 	return exec.Command("powershell", "-Command", cmd).Run()
 }
 
@@ -117,7 +117,7 @@ func runMeElevated() {
 
 	err := cmd.Start()
 	if err != nil {
-		fmt.Println(red("Failed to elevate: "), err)
+		fmt.Println(red(T("Failed to elevate: ")), err)
 		os.Exit(1)
 	}
 	os.Exit(0)

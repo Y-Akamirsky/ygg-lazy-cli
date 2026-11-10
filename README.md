@@ -11,6 +11,7 @@
 - 📊 **Advanced metrics** - Latency, jitter, stability scoring
 - 🔧 **Dead peer management** - Automatic detection and removal
 - 📁 **Custom config path** - Use any `yggdrasil.conf` with `--config|-c`
+- 🌐 **Localization** - English and Russian UI with OS locale detection
 - 📦 **Easy install/uninstall** - One-command installation with auto-generated uninstaller
 - ℹ️ **Version flags** - `--version` and `--help` support
 
@@ -25,6 +26,9 @@ sudo ygglazy
 
 # Use a custom config file
 sudo ygglazy --config /path/to/yggdrasil.conf
+
+# Force Russian or English UI
+sudo ygglazy --lang ru
 
 # Get help
 ygglazy --help

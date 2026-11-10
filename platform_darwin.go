@@ -8,8 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-
-	"github.com/AlecAivazis/survey/v2"
 )
 
 type DarwinPlatform struct{}
@@ -40,37 +38,37 @@ func (p *DarwinPlatform) FindConfigPath() string {
 }
 
 func (p *DarwinPlatform) Install() error {
-	fmt.Println(cyan("=== macOS Yggdrasil Installation ==="))
-	
+	fmt.Println(cyan(T("=== macOS Yggdrasil Installation ===")))
+
 	// Check if Homebrew is installed
 	if _, err := exec.LookPath("brew"); err == nil {
-		fmt.Println("Homebrew detected.")
-		choice := ""
-		survey.AskOne(&survey.Select{
-			Message: "Installation Method:",
-			Options: []string{"Homebrew (recommended)", "Download .pkg", "Cancel"},
-		}, &choice)
+		fmt.Println(T("Homebrew detected."))
+		installMethod, _ := askChoice("Installation Method:", []choice{
+			{key: "Homebrew (recommended)", label: T("Homebrew (recommended)")},
+			{key: "Download .pkg", label: T("Download .pkg")},
+			{key: "Cancel", label: T("Cancel")},
+		}, "", 0)
 
-		if choice == "Cancel" {
-			return fmt.Errorf("installation cancelled")
+		if installMethod == "Cancel" || installMethod == "" {
+			return fmt.Errorf("%s", T("installation cancelled"))
 		}
 
-		if choice == "Homebrew (recommended)" {
-			fmt.Println("Installing via Homebrew...")
+		if installMethod == "Homebrew (recommended)" {
+			fmt.Println(T("Installing via Homebrew..."))
 			cmd := exec.Command("brew", "install", "yggdrasil-go")
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("brew install failed: %v", err)
+				return fmt.Errorf("%s: %v", T("brew install failed"), err)
 			}
-			fmt.Println(green("Installation complete."))
-			fmt.Println(yellow("Note: To start service, use: brew services start yggdrasil-go"))
+			fmt.Println(green(T("Installation complete.")))
+			fmt.Println(yellow(T("Note: To start service, use: brew services start yggdrasil-go")))
 			return nil
 		}
 	}
 
 	// Download .pkg installer
-	fmt.Println("Downloading .pkg installer...")
+	fmt.Println(T("Downloading .pkg installer..."))
 	arch := runtime.GOARCH
 	var searchStr string
 	if arch == "arm64" {
@@ -85,12 +83,12 @@ func (p *DarwinPlatform) Install() error {
 	}
 
 	filename := "yggdrasil_installer.pkg"
-	fmt.Printf("Downloading %s (Arch: %s)...\n", url, arch)
+	fmt.Println(T("Downloading %s (Arch: %s)...", url, arch))
 	if err := downloadFile(filename, url); err != nil {
 		return err
 	}
 
-	fmt.Println("Installing package...")
+	fmt.Println(T("Installing package..."))
 	cmd := exec.Command("installer", "-pkg", filename, "-target", "/")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -99,7 +97,7 @@ func (p *DarwinPlatform) Install() error {
 	}
 
 	os.Remove(filename)
-	fmt.Println(green("Installation complete."))
+	fmt.Println(green(T("Installation complete.")))
 	return nil
 }
 
@@ -118,12 +116,12 @@ func (p *DarwinPlatform) ManageService(act string) error {
 		return exec.Command("launchctl", "load", plistPath).Run()
 	case "Enable Autostart":
 		// On macOS, loaded LaunchDaemons auto-start by default
-		fmt.Println(yellow("Service will auto-start after load."))
+		fmt.Println(yellow(T("Service will auto-start after load.")))
 		return exec.Command("launchctl", "load", plistPath).Run()
 	case "Disable Autostart":
 		return exec.Command("launchctl", "unload", plistPath).Run()
 	default:
-		return fmt.Errorf("unknown action: %s", act)
+		return fmt.Errorf("%s: %s", T("unknown action"), act)
 	}
 }
 

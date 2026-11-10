@@ -9,8 +9,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-
-	"github.com/AlecAivazis/survey/v2"
 )
 
 type LinuxPlatform struct{}
@@ -41,7 +39,7 @@ func (p *LinuxPlatform) FindConfigPath() string {
 
 func (p *LinuxPlatform) Install() error {
 	distroID, distroLike := getLinuxDistroInfo()
-	fmt.Printf("Detected Distro: %s (Like: %s)\n", distroID, distroLike)
+	fmt.Println(T("Detected Distro: %s (Like: %s)", distroID, distroLike))
 
 	// Detection Logic
 	isDebian := strings.Contains(distroID, "debian") || strings.Contains(distroID, "ubuntu") ||
@@ -62,20 +60,19 @@ func (p *LinuxPlatform) Install() error {
 
 	// Installation Logic
 	if isDebian {
-		choice := ""
-		survey.AskOne(&survey.Select{
-			Message: "Installation Method:",
-			Options: []string{"Download .deb", "Use APT Repository"},
-		}, &choice)
+		installChoice, _ := askChoice("Installation Method:", []choice{
+			{key: "Download .deb", label: T("Download .deb")},
+			{key: "Use APT Repository", label: T("Use APT Repository")},
+		}, "", 0)
 
-		if choice == "Download .deb" {
+		if installChoice == "Download .deb" {
 			arch := runtime.GOARCH
 			url, err := getLatestReleaseURL("yggdrasil-go", ".deb", arch)
 			if err != nil {
 				return err
 			}
 
-			fmt.Printf("Downloading %s...\n", url)
+			fmt.Println(T("Downloading %s...", url))
 			if err := downloadFile("ygg.deb", url); err != nil {
 				return err
 			}
@@ -96,7 +93,7 @@ func (p *LinuxPlatform) Install() error {
 		}
 
 	} else if isFedora {
-		fmt.Println("Detected Fedora-based system. Using DNF and COPR...")
+		fmt.Println(T("Detected Fedora-based system. Using DNF and COPR..."))
 		cmds := [][]string{
 			{"dnf", "install", "dnf-plugins-core", "-y"},
 			{"dnf", "copr", "enable", "neilalexander/yggdrasil", "-y"},
@@ -105,46 +102,46 @@ func (p *LinuxPlatform) Install() error {
 		return runCommands(cmds)
 
 	} else if isVoid {
-		fmt.Println("Detected Void Linux. Using xbps-install...")
+		fmt.Println(T("Detected Void Linux. Using xbps-install..."))
 		cmd := exec.Command("xbps-install", "-S", "yggdrasil", "-y")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("xbps-install failed: %v", err)
+			return fmt.Errorf("%s: %v", T("xbps-install failed"), err)
 		}
-		fmt.Println("Installed successfully via XBPS.")
+		fmt.Println(T("Installed successfully via XBPS."))
 		return nil
 
 	} else if isAlpine {
-		fmt.Println("Detected Alpine Linux. Using apk...")
+		fmt.Println(T("Detected Alpine Linux. Using apk..."))
 		cmd := exec.Command("apk", "add", "yggdrasil")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("apk failed: %v", err)
+			return fmt.Errorf("%s: %v", T("apk failed"), err)
 		}
-		fmt.Println("Installed successfully via APK.")
+		fmt.Println(T("Installed successfully via APK."))
 		return nil
 
 	} else if isArch {
-		fmt.Println("Detected Arch-based system. Attempting to install via pacman...")
+		fmt.Println(T("Detected Arch-based system. Attempting to install via pacman..."))
 		pkgs := []string{"yggdrasil-go", "yggdrasil"}
 		for _, pkg := range pkgs {
-			fmt.Printf("Trying package: %s\n", pkg)
+			fmt.Println(T("Trying package: %s", pkg))
 			cmd := exec.Command("pacman", "-S", pkg, "--noconfirm")
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			err := cmd.Run()
 			if err == nil {
-				fmt.Println("Installed successfully.")
+				fmt.Println(T("Installed successfully."))
 				return nil
 			}
-			fmt.Printf("Failed to install %s. Trying next...\n", pkg)
+			fmt.Println(T("Failed to install %s. Trying next...", pkg))
 		}
-		return fmt.Errorf("could not install yggdrasil via pacman. Try installing manually from AUR")
+		return fmt.Errorf("%s", T("could not install yggdrasil via pacman. Try installing manually from AUR"))
 	}
 
-	return fmt.Errorf("unsupported distribution: %s", distroID)
+	return fmt.Errorf("%s", T("unsupported distribution: %s", distroID))
 }
 
 func (p *LinuxPlatform) ManageService(act string) error {
