@@ -632,6 +632,26 @@ func addCustomPeer() {
 
 // --- Logic: Config Writer V4 (Clean formatting) ---
 
+// peersCloseRE matches the closing bracket of the Peers array: the first line
+// that contains only "]" (optionally indented and with trailing spaces). This
+// avoids matching the square brackets used by IPv6 addresses.
+var peersCloseRE = regexp.MustCompile(`(?m)^[ \t]*\][ \t]*(?:\r?\n|$)`)
+
+// peersBlockBounds returns the byte range of the "Peers: [...]" block,
+// including the closing bracket and its line ending.
+func peersBlockBounds(content string) (start, end int, ok bool) {
+	start = strings.Index(content, "Peers: [")
+	if start == -1 {
+		return 0, 0, false
+	}
+	rest := content[start+len("Peers: ["):]
+	loc := peersCloseRE.FindStringIndex(rest)
+	if loc == nil {
+		return 0, 0, false
+	}
+	return start, start + len("Peers: [") + loc[1], true
+}
+
 func getConfigPeers() []string {
 	contentBytes, err := os.ReadFile(detectedConfigPath)
 	if err != nil {
@@ -640,21 +660,10 @@ func getConfigPeers() []string {
 	content := string(contentBytes)
 	var peers []string
 
-	startIdx := strings.Index(content, "Peers: [")
-	if startIdx == -1 {
+	startIdx, endIdx, ok := peersBlockBounds(content)
+	if !ok {
 		return peers
 	}
-	// Look for closing bracket with proper indentation (not IPv6 bracket)
-	// Search for "\n  ]" or "\n]" which marks the end of the Peers array
-	endIdx := strings.Index(content[startIdx:], "\n  ]")
-	if endIdx == -1 {
-		// Try alternative formatting
-		endIdx = strings.Index(content[startIdx:], "\n]")
-	}
-	if endIdx == -1 {
-		return peers
-	}
-	endIdx += startIdx
 
 	block := content[startIdx:endIdx]
 	// Improved regex to properly handle IPv6 addresses in square brackets
@@ -668,13 +677,7 @@ func getConfigPeers() []string {
 }
 
 func addPeersToConfig(newPeers []string) {
-	contentBytes, err := os.ReadFile(detectedConfigPath)
-	if err != nil {
-		return
-	}
-	content := string(contentBytes)
-
-	// Combine existing peers + new peers
+	// Combine existing peers + new peers (skip duplicates)
 	existing := getConfigPeers()
 	finalList := existing
 	for _, p := range newPeers {
@@ -690,43 +693,14 @@ func addPeersToConfig(newPeers []string) {
 		}
 	}
 
-	// Rebuild the "Peers: [...]" block entirely
-	newBlock := "Peers: ["
-	for _, p := range finalList {
-		newBlock += fmt.Sprintf("\n  %s", p) // Indent 2 spaces
+	if err := writeConfigPeers(finalList); err != nil {
+		fmt.Println(red("Failed to update config: "), err)
+		return
 	}
-	newBlock += "\n]"
-
-	// Inject into file
-	startIdx := strings.Index(content, "Peers: [")
-	if startIdx != -1 {
-		// Found existing block, replace it
-		// Look for properly formatted closing bracket (not IPv6 bracket)
-		closingPattern := "\n  ]"
-		endIdx := strings.Index(content[startIdx:], closingPattern)
-		if endIdx == -1 {
-			closingPattern = "\n]"
-			endIdx = strings.Index(content[startIdx:], closingPattern)
-		}
-		if endIdx != -1 {
-			// Skip past the entire closing pattern including the bracket
-			endIdx = startIdx + endIdx + len(closingPattern)
-			newContent := content[:startIdx] + newBlock + content[endIdx:]
-			os.WriteFile(detectedConfigPath, []byte(newContent), 0644)
-			fmt.Println(green("Peers added and config formatted."))
-			return
-		}
-	}
-
-	// Block not found, append to end
-	f, _ := os.OpenFile(detectedConfigPath, os.O_APPEND|os.O_WRONLY, 0644)
-	f.WriteString("\n" + newBlock + "\n")
-	f.Close()
-	fmt.Println(green("Peers block appended."))
+	fmt.Println(green("Peers added and config formatted."))
 }
 
 func removePeersFromConfig(toRemove []string) {
-	// Re-use logic: Get current -> Filter -> Re-add remaining
 	current := getConfigPeers()
 	var keep []string
 
@@ -743,36 +717,61 @@ func removePeersFromConfig(toRemove []string) {
 		}
 	}
 
-	// Reconstruct the block manually to overwrite file
-	contentBytes, err := os.ReadFile(detectedConfigPath)
-	if err != nil {
+	if err := writeConfigPeers(keep); err != nil {
+		fmt.Println(red("Failed to update config: "), err)
 		return
 	}
+	fmt.Println(green("Peers removed."))
+}
+
+// writeConfigPeers rewrites the "Peers: [...]" block in the detected config.
+func writeConfigPeers(peers []string) error {
+	return writePeersToFile(detectedConfigPath, peers)
+}
+
+// writePeersToFile replaces the whole Peers block instead of patching it.
+// Rebuilding the block also cleans up blank lines left by previous edits.
+func writePeersToFile(path string, peers []string) error {
+	contentBytes, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
 	content := string(contentBytes)
+	block := formatPeersBlock(peers)
 
-	newBlock := "Peers: ["
-	for _, p := range keep {
-		newBlock += fmt.Sprintf("\n  %s", p)
+	startIdx, endIdx, ok := peersBlockBounds(content)
+	if !ok {
+		if content != "" {
+			if !strings.HasSuffix(content, "\n") {
+				content += "\n"
+			}
+			content += "\n"
+		}
+		return os.WriteFile(path, []byte(content+block+"\n"), 0644)
 	}
-	newBlock += "\n  ]\n"
 
-	startIdx := strings.Index(content, "Peers: [")
-	if startIdx != -1 {
-		// Look for properly formatted closing bracket (not IPv6 bracket)
-		closingPattern := "\n  ]"
-		endIdx := strings.Index(content[startIdx:], closingPattern)
-		if endIdx == -1 {
-			closingPattern = "\n]"
-			endIdx = strings.Index(content[startIdx:], closingPattern)
-		}
-		if endIdx != -1 {
-			// Skip past the entire closing pattern including the bracket
-			endIdx = startIdx + endIdx + len(closingPattern)
-			newContent := content[:startIdx] + newBlock + content[endIdx:]
-			os.WriteFile(detectedConfigPath, []byte(newContent), 0644)
-			fmt.Println(green("Peers removed."))
-		}
+	// Keep the content after the block, collapsing extra blank lines that
+	// older versions left behind on every add/remove operation.
+	tail := strings.TrimLeft(content[endIdx:], "\r\n")
+	newContent := content[:startIdx] + block
+	if tail != "" {
+		newContent += "\n\n" + tail
+	} else {
+		newContent += "\n"
 	}
+
+	return os.WriteFile(path, []byte(newContent), 0644)
+}
+
+func formatPeersBlock(peers []string) string {
+	var b strings.Builder
+	b.WriteString("Peers: [")
+	for _, p := range peers {
+		b.WriteString("\n  ")
+		b.WriteString(p)
+	}
+	b.WriteString("\n]")
+	return b.String()
 }
 
 // --- Helpers ---
