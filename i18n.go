@@ -243,10 +243,10 @@ var ruCatalog = map[string]string{
 	"\n✓ Dead peers removed from config.":                                   "\n✓ Мёртвые пиры удалены из конфига.",
 
 	// General
-	"Press Enter...":    "Нажмите Enter...",
-	"Configurator v":    "Конфигуратор v",
-	"Select language:":  "Выберите язык:",
-	"Language changed.": "Язык изменён.",
+	"Press any key or click to continue...": "Нажмите любую клавишу или кликните мышью...",
+	"Configurator v":                        "Конфигуратор v",
+	"Select language:":                      "Выберите язык:",
+	"Language changed.":                     "Язык изменён.",
 	"Use arrows or mouse to move, enter to confirm, type to filter":                "Стрелки/мышь — выбор, Enter — подтвердить, ввод — фильтр",
 	"Use arrows or mouse to move, space to mark, enter to confirm, type to filter": "Стрелки/мышь — выбор, Пробел — отметить, Enter — подтвердить, ввод — фильтр",
 

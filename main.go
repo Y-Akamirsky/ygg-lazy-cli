@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/fatih/color"
 )
 
@@ -209,7 +210,7 @@ func languageMenu() {
 
 	currentLang = Lang(selected)
 	fmt.Println(green(T("Language changed.")))
-	waitEnter()
+	waitContinue()
 }
 
 func serviceLabel(command string) string {
@@ -324,7 +325,7 @@ func serviceMenu() {
 		} else {
 			fmt.Println(green(T("Done.")))
 		}
-		waitEnter()
+		waitContinue()
 	}
 }
 
@@ -340,7 +341,7 @@ func viewCurrentPeers() {
 			fmt.Printf("%d. %s\n", i+1, p)
 		}
 	}
-	waitEnter()
+	waitContinue()
 }
 
 // --- Logic: Installation ---
@@ -389,7 +390,7 @@ func ensureConfig() {
 	if err := generateConfig(detectedConfigPath); err != nil {
 		fmt.Println(red(T("Failed to generate config: ")), err)
 		fmt.Printf("%s %s\n", yellow(T("Generate it manually with:")), configGenCommand(detectedConfigPath))
-		waitEnter()
+		waitContinue()
 		os.Exit(1)
 	}
 	fmt.Println(green(T("Config generated at %s", detectedConfigPath)))
@@ -426,7 +427,7 @@ func installYggdrasil() {
 
 	if err := currentPlatform.Install(); err != nil {
 		fmt.Println(red(T("Installation failed: ")), err)
-		waitEnter()
+		waitContinue()
 		return
 	}
 
@@ -446,7 +447,7 @@ func installYggdrasil() {
 			fmt.Println(green(T("Config generated at %s", detectedConfigPath)))
 		}
 	}
-	waitEnter()
+	waitContinue()
 }
 
 // yggdrasilBinary resolves the yggdrasil executable via PATH, with a Windows
@@ -685,7 +686,7 @@ func autoAddPeers() {
 		fmt.Println(yellow(T("  - Network connectivity issues")))
 		fmt.Println(yellow(T("  - Firewall blocking connections")))
 		fmt.Println(yellow(T("  - All peers are currently down")))
-		waitEnter()
+		waitContinue()
 		return
 	}
 
@@ -747,7 +748,7 @@ func autoAddPeers() {
 		fmt.Sscanf(customStr, "%d", &countToAdd)
 		if countToAdd < 1 || countToAdd > len(ranked) {
 			fmt.Println(red(T("Invalid number. Canceling.")))
-			waitEnter()
+			waitContinue()
 			return
 		}
 	case "Cancel":
@@ -800,7 +801,7 @@ func manualAddPeers() {
 		peers := fetchPeersFromURLs(regionMap[selReg])
 		if len(peers) == 0 {
 			fmt.Println(T("No peers."))
-			waitEnter()
+			waitContinue()
 			continue
 		}
 		indices, err := promptList(T("Select Peers:"), peers, -1, 0, true)
@@ -819,7 +820,7 @@ func removePeersMenu() {
 	current := getConfigPeers()
 	if len(current) == 0 {
 		fmt.Println(yellow(T("No peers in config.")))
-		waitEnter()
+		waitContinue()
 		return
 	}
 	indices, err := promptList(T("Select to Remove:"), current, -1, 0, true)
@@ -996,7 +997,7 @@ func showStatus() {
 	}
 	out, _ := exec.Command(cmdName, "getself").CombinedOutput()
 	fmt.Println(string(out))
-	waitEnter()
+	waitContinue()
 }
 
 func restartServicePrompt() {
@@ -1133,13 +1134,13 @@ func checkActivePeersStatus() {
 	if err != nil {
 		fmt.Println(red(T("Error: ")), err)
 		fmt.Println(yellow(T("Make sure Yggdrasil service is running.")))
-		waitEnter()
+		waitContinue()
 		return
 	}
 
 	fmt.Println(string(out))
 	fmt.Println(yellow(T("\nTip: Use 'Remove Dead Peers' to clean up peers with 'Down' status.")))
-	waitEnter()
+	waitContinue()
 }
 
 // removeDeadPeers removes peers that are currently in "Down" state
@@ -1158,7 +1159,7 @@ func removeDeadPeers() {
 	if err != nil {
 		fmt.Println(red(T("Error getting peer status: ")), err)
 		fmt.Println(yellow(T("Make sure Yggdrasil service is running.")))
-		waitEnter()
+		waitContinue()
 		return
 	}
 
@@ -1166,7 +1167,7 @@ func removeDeadPeers() {
 	var result map[string]interface{}
 	if err := json.Unmarshal(out, &result); err != nil {
 		fmt.Println(red(T("Error parsing peers data: ")), err)
-		waitEnter()
+		waitContinue()
 		return
 	}
 
@@ -1175,14 +1176,14 @@ func removeDeadPeers() {
 	if !ok {
 		fmt.Println(yellow(T("No peer data found in response.")))
 		fmt.Println(yellow(T("Make sure Yggdrasil service is running and has been started with some peers.")))
-		waitEnter()
+		waitContinue()
 		return
 	}
 
 	if len(peersData) == 0 {
 		fmt.Println(yellow(T("No active peer connections found.")))
 		fmt.Println(yellow(T("Yggdrasil might still be starting up or no peers are configured.")))
-		waitEnter()
+		waitContinue()
 		return
 	}
 
@@ -1237,7 +1238,7 @@ func removeDeadPeers() {
 
 	if len(downPeers) == 0 {
 		fmt.Println(green(T("✓ All peers are up! No dead peers to remove.")))
-		waitEnter()
+		waitContinue()
 		return
 	}
 
@@ -1289,7 +1290,7 @@ func removeDeadPeers() {
 	if len(deadPeersInConfig) == 0 {
 		fmt.Println(yellow(T("No dead peers found in config to remove.")))
 		fmt.Println(yellow(T("(All dead peers were added temporarily, not via config)")))
-		waitEnter()
+		waitContinue()
 		return
 	}
 
@@ -1415,10 +1416,37 @@ func resolveConfigPath(path string) (string, error) {
 	return abs, nil
 }
 
-func waitEnter() {
+// waitContinue blocks until the user presses any key or clicks with the mouse.
+func waitContinue() {
 	fmt.Println()
-	fmt.Println(T("Press Enter..."))
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
+	fmt.Println(T("Press any key or click to continue..."))
+
+	reader := newInputReader(true)
+	defer reader.Close()
+
+	for {
+		ev, err := reader.ReadEvent()
+		if err != nil {
+			// Not an interactive terminal: fall back to a plain line read.
+			_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+			return
+		}
+		if ev.mouse == nil && ev.key == terminal.KeyInterrupt {
+			fmt.Println(T("Bye!"))
+			os.Exit(0)
+		}
+		if continueEvent(ev) {
+			return
+		}
+	}
+}
+
+// continueEvent reports whether an input event dismisses the continue prompt.
+func continueEvent(ev inputEvent) bool {
+	if ev.mouse != nil {
+		return ev.mouse.button == mouseLeft
+	}
+	return ev.key != terminal.IgnoreKey
 }
 
 func clearScreen() {
