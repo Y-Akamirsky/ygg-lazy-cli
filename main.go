@@ -19,8 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AlecAivazis/survey/v2"
-	"github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/fatih/color"
 )
 
@@ -171,30 +169,19 @@ type choice struct {
 // askChoice shows localized labels and returns the stable internal key.
 func askChoice(message string, choices []choice, defaultKey string, pageSize int) (string, error) {
 	labels := make([]string, len(choices))
-	defaultLabel := ""
+	defaultIndex := -1
 	for i, c := range choices {
 		labels[i] = c.label
 		if c.key == defaultKey {
-			defaultLabel = c.label
+			defaultIndex = i
 		}
 	}
 
-	prompt := &survey.Select{
-		Message:  T(message),
-		Options:  labels,
-		PageSize: pageSize,
-		Default:  defaultLabel,
-	}
-	var selected string
-	if err := survey.AskOne(prompt, &selected); err != nil {
+	indices, err := promptList(T(message), labels, defaultIndex, pageSize, false)
+	if err != nil || len(indices) == 0 {
 		return "", err
 	}
-	for i, label := range labels {
-		if label == selected {
-			return choices[i].key, nil
-		}
-	}
-	return selected, nil
+	return choices[indices[0]].key, nil
 }
 
 // askKeysSelect builds choices from canonical keys translated via T.
@@ -216,7 +203,7 @@ func languageMenu() {
 		{key: string(LangRU), label: "Русский"},
 		{key: "back", label: T("Back")},
 	}, string(currentLang), 0)
-	if err == terminal.InterruptErr || selected == "back" || selected == "" {
+	if err == errPromptInterrupt || selected == "back" || selected == "" {
 		return
 	}
 
@@ -277,9 +264,13 @@ func mainMenu() {
 		}
 
 		mode, err := askChoice("Main Menu:", choices, "", 12)
-		if err == terminal.InterruptErr {
-			fmt.Println(T("Bye!"))
-			os.Exit(0)
+		if err != nil {
+			if err == errPromptInterrupt {
+				fmt.Println(T("Bye!"))
+				os.Exit(0)
+			}
+			fmt.Println(red(T("Error: ")), err)
+			return
 		}
 
 		switch mode {
@@ -321,7 +312,7 @@ func serviceMenu() {
 		choices = append(choices, choice{key: "Back", label: T("Back")})
 
 		action, err := askChoice("Service Control (Esc to back):", choices, "", 0)
-		if err == terminal.InterruptErr || action == "Back" {
+		if err == errPromptInterrupt || action == "Back" {
 			return
 		}
 		if action == "" {
@@ -749,11 +740,10 @@ func autoAddPeers() {
 	case "10 peers":
 		countToAdd = 10
 	case "Custom number":
-		customPrompt := &survey.Input{
-			Message: T("Enter number of peers to add (1-%d):", len(ranked)),
+		customStr, err := promptInput(T("Enter number of peers to add (1-%d):", len(ranked)), "")
+		if err != nil {
+			return
 		}
-		var customStr string
-		survey.AskOne(customPrompt, &customStr)
 		fmt.Sscanf(customStr, "%d", &countToAdd)
 		if countToAdd < 1 || countToAdd > len(ranked) {
 			fmt.Println(red(T("Invalid number. Canceling.")))
@@ -803,7 +793,7 @@ func manualAddPeers() {
 		regionChoices = append(regionChoices, choice{key: "Back", label: T("Back")})
 
 		selReg, err := askChoice("Region:", regionChoices, "", 0)
-		if err == terminal.InterruptErr || selReg == "Back" || selReg == "" {
+		if err == errPromptInterrupt || selReg == "Back" || selReg == "" {
 			return
 		}
 
@@ -813,9 +803,12 @@ func manualAddPeers() {
 			waitEnter()
 			continue
 		}
-		selPeers := []string{}
-		err = survey.AskOne(&survey.MultiSelect{Message: T("Select Peers:"), Options: peers}, &selPeers)
-		if err == nil && len(selPeers) > 0 {
+		indices, err := promptList(T("Select Peers:"), peers, -1, 0, true)
+		if err == nil && len(indices) > 0 {
+			selPeers := make([]string, len(indices))
+			for i, index := range indices {
+				selPeers[i] = peers[index]
+			}
 			addPeersToConfig(selPeers)
 			restartServicePrompt()
 		}
@@ -829,9 +822,12 @@ func removePeersMenu() {
 		waitEnter()
 		return
 	}
-	toRemove := []string{}
-	err := survey.AskOne(&survey.MultiSelect{Message: T("Select to Remove:"), Options: current}, &toRemove)
-	if err == nil && len(toRemove) > 0 {
+	indices, err := promptList(T("Select to Remove:"), current, -1, 0, true)
+	if err == nil && len(indices) > 0 {
+		toRemove := make([]string, len(indices))
+		for i, index := range indices {
+			toRemove[i] = current[index]
+		}
 		if askConfirm("Remove selected peers from config?", false) {
 			removePeersFromConfig(toRemove)
 			restartServicePrompt()
@@ -840,8 +836,7 @@ func removePeersMenu() {
 }
 
 func addCustomPeer() {
-	input := ""
-	err := survey.AskOne(&survey.Input{Message: T("Enter URIs (space separated):")}, &input)
+	input, err := promptInput(T("Enter URIs (space separated):"), "")
 	if err == nil && input != "" {
 		addPeersToConfig(strings.Fields(input))
 		restartServicePrompt()

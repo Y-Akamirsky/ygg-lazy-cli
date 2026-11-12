@@ -183,3 +183,73 @@ func TestResolveConfigPathRejectsDirectory(t *testing.T) {
 		t.Fatal("expected an error for a directory path")
 	}
 }
+
+func TestListModelSelection(t *testing.T) {
+	m := newListModel([]string{"alpha", "beta", "gamma"}, -1, 0, false)
+
+	if got := m.result(); len(got) != 1 || got[0] != 0 {
+		t.Fatalf("initial selection = %v, want [0]", got)
+	}
+
+	m.move(1)
+	if got := m.result(); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("selection after down = %v, want [1]", got)
+	}
+
+	m.move(-1)
+	m.move(-1)
+	if got := m.result(); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("selection must wrap around = %v, want [2]", got)
+	}
+}
+
+func TestListModelFilterKeepsSelection(t *testing.T) {
+	m := newListModel([]string{"tls://a:443", "quic://b:443", "tls://c:443"}, -1, 0, false)
+
+	for _, r := range "quic" {
+		m.typeRune(r)
+	}
+	if len(m.visible) != 1 || m.options[m.visible[0]] != "quic://b:443" {
+		t.Fatalf("visible = %v, want the quic peer", m.visible)
+	}
+	if got := m.result(); len(got) != 1 || m.options[got[0]] != "quic://b:443" {
+		t.Fatalf("filtered selection = %v", got)
+	}
+
+	for range "quic" {
+		m.backspace()
+	}
+	if len(m.visible) != 3 {
+		t.Fatalf("visible after backspace = %v, want all options", m.visible)
+	}
+}
+
+func TestListModelMultiSelect(t *testing.T) {
+	m := newListModel([]string{"one", "two", "three"}, -1, 0, true)
+
+	m.toggle()
+	m.move(1)
+	m.toggle()
+	m.move(1)
+	m.toggle() // toggle "three" on
+	m.toggle() // and off again
+
+	if got := m.result(); len(got) != 2 || got[0] != 0 || got[1] != 1 {
+		t.Fatalf("multi selection = %v, want [0 1]", got)
+	}
+}
+
+func TestListModelDefaultsAndPaging(t *testing.T) {
+	m := newListModel([]string{"a", "b", "c", "d", "e"}, 3, 2, false)
+	if m.cursor != 3 {
+		t.Fatalf("cursor = %d, want 3", m.cursor)
+	}
+
+	start, end := m.page()
+	if start < 0 || end > len(m.visible) || end-start > 2 {
+		t.Fatalf("page = [%d %d] for %d options", start, end, len(m.visible))
+	}
+	if m.cursor < start || m.cursor >= end {
+		t.Fatalf("cursor %d is outside page [%d %d)", m.cursor, start, end)
+	}
+}

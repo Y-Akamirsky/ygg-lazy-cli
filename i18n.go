@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/AlecAivazis/survey/v2"
-	"github.com/AlecAivazis/survey/v2/terminal"
 )
 
 // Lang is a supported interface language.
@@ -250,6 +247,8 @@ var ruCatalog = map[string]string{
 	"Configurator v":    "Конфигуратор v",
 	"Select language:":  "Выберите язык:",
 	"Language changed.": "Язык изменён.",
+	"Use arrows to move, enter to confirm, type to filter":                "Стрелки — выбор, Enter — подтвердить, ввод — фильтр",
+	"Use arrows to move, space to mark, enter to confirm, type to filter": "Стрелки — выбор, Пробел — отметить, Enter — подтвердить, ввод — фильтр",
 
 	// Confirmation
 	"(Y/n)": "(Д/н)",
@@ -309,73 +308,6 @@ func setLanguage(value string) error {
 	return nil
 }
 
-// localizedConfirm renders a Confirm prompt with localized yes/no markers and
-// accepts both English (y/n) and Russian (д/н) answers.
-type localizedConfirm struct {
-	survey.Renderer
-	Message string
-	Default bool
-}
-
-type localizedConfirmData struct {
-	survey.Confirm
-	Answer  string
-	Config  *survey.PromptConfig
-	Options string
-}
-
-const localizedConfirmTemplate = `
-{{- color .Config.Icons.Question.Format }}{{ .Config.Icons.Question.Text }} {{color "reset"}}
-{{- color "default+hb"}}{{ .Message }} {{color "reset"}}
-{{- if .Answer}}
-  {{- color "cyan"}}{{.Answer}}{{color "reset"}}{{"\n"}}
-{{- else }}
-  {{- color "white"}}{{ .Options }} {{color "reset"}}
-{{- end}}`
-
-func (c *localizedConfirm) templateData(config *survey.PromptConfig, answer string) localizedConfirmData {
-	options := T("(y/N)")
-	if c.Default {
-		options = T("(Y/n)")
-	}
-	return localizedConfirmData{
-		Confirm: survey.Confirm{Message: c.Message, Default: c.Default},
-		Answer:  answer,
-		Config:  config,
-		Options: options,
-	}
-}
-
-func (c *localizedConfirm) Prompt(config *survey.PromptConfig) (interface{}, error) {
-	if err := c.Render(localizedConfirmTemplate, c.templateData(config, "")); err != nil {
-		return c.Default, err
-	}
-
-	cursor := c.NewCursor()
-	rr := c.NewRuneReader()
-	_ = rr.SetTermMode()
-	defer func() { _ = rr.RestoreTermMode() }()
-
-	for {
-		line, err := rr.ReadLine(0)
-		if err != nil {
-			return c.Default, err
-		}
-		cursor.PreviousLine(1)
-
-		value, ok := parseConfirmAnswer(string(line), c.Default)
-		if ok {
-			return value, nil
-		}
-		if err := c.Error(config, fmt.Errorf("%s", T("%q is not a valid answer, please try again.", strings.TrimSpace(string(line))))); err != nil {
-			return c.Default, err
-		}
-		if err := c.Render(localizedConfirmTemplate, c.templateData(config, "")); err != nil {
-			return c.Default, err
-		}
-	}
-}
-
 // parseConfirmAnswer accepts English and Russian yes/no answers.
 func parseConfirmAnswer(answer string, defaultValue bool) (value bool, ok bool) {
 	switch strings.ToLower(strings.TrimSpace(answer)) {
@@ -390,20 +322,11 @@ func parseConfirmAnswer(answer string, defaultValue bool) (value bool, ok bool) 
 	}
 }
 
-func (c *localizedConfirm) Cleanup(config *survey.PromptConfig, val interface{}) error {
-	answer := T("No")
-	if val.(bool) {
-		answer = T("Yes")
-	}
-	return c.Render(localizedConfirmTemplate, c.templateData(config, answer))
-}
-
 // askConfirm asks a yes/no question with a localized prompt.
 func askConfirm(message string, defaultValue bool) bool {
-	answer := defaultValue
-	err := survey.AskOne(&localizedConfirm{Message: T(message), Default: defaultValue}, &answer)
+	answer, err := promptConfirm(T(message), defaultValue)
 	if err != nil {
-		if err == terminal.InterruptErr {
+		if err == errPromptInterrupt {
 			fmt.Println(T("Bye!"))
 			os.Exit(0)
 		}
