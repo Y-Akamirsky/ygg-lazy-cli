@@ -25,7 +25,7 @@ import (
 // --- Constants & Vars ---
 
 const (
-	version    = "0.1.6"
+	version    = "1.0.0"
 	repoOwner  = "yggdrasil-network"
 	repoPeers  = "public-peers"
 	windowsExe = `C:\Program Files\Yggdrasil\yggdrasilctl.exe`

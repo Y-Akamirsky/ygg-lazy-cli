@@ -1,7 +1,7 @@
 # YggLazy CLI
 ### Lazy way to configure Yggdrasil Network!
 
-![Version](https://img.shields.io/badge/version-0.1.6-blue) ![License](https://img.shields.io/badge/license-GPL3-orange)
+![Version](https://img.shields.io/badge/version-1.0.0-blue) ![License](https://img.shields.io/badge/license-GPL3-orange)
 
 ![Logo](linux-install/ygglazycli.svg)
 
