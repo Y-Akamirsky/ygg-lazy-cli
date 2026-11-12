@@ -247,8 +247,8 @@ var ruCatalog = map[string]string{
 	"Configurator v":    "Конфигуратор v",
 	"Select language:":  "Выберите язык:",
 	"Language changed.": "Язык изменён.",
-	"Use arrows to move, enter to confirm, type to filter":                "Стрелки — выбор, Enter — подтвердить, ввод — фильтр",
-	"Use arrows to move, space to mark, enter to confirm, type to filter": "Стрелки — выбор, Пробел — отметить, Enter — подтвердить, ввод — фильтр",
+	"Use arrows or mouse to move, enter to confirm, type to filter":                "Стрелки/мышь — выбор, Enter — подтвердить, ввод — фильтр",
+	"Use arrows or mouse to move, space to mark, enter to confirm, type to filter": "Стрелки/мышь — выбор, Пробел — отметить, Enter — подтвердить, ввод — фильтр",
 
 	// Confirmation
 	"(Y/n)": "(Д/н)",

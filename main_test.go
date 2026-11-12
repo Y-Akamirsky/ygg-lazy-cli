@@ -253,3 +253,52 @@ func TestListModelDefaultsAndPaging(t *testing.T) {
 		t.Fatalf("cursor %d is outside page [%d %d)", m.cursor, start, end)
 	}
 }
+
+func TestListModelVisibleAtRow(t *testing.T) {
+	m := newListModel([]string{"a", "b", "c", "d", "e"}, -1, 3, false)
+
+	// Header is on row 8, options on rows 9-11.
+	for row, want := range map[int]int{9: 0, 10: 1, 11: 2} {
+		pos, ok := m.visibleAtRow(row, 11)
+		if !ok || pos != want {
+			t.Fatalf("row %d = (%d, %v), want (%d, true)", row, pos, ok, want)
+		}
+	}
+	for _, row := range []int{7, 8, 12} {
+		if _, ok := m.visibleAtRow(row, 11); ok {
+			t.Fatalf("row %d must not map to an option", row)
+		}
+	}
+
+	// Scroll the window to the end and check the mapping follows it.
+	m.cursor = 4
+	if _, ok := m.visibleAtRow(10, 10); !ok {
+		t.Fatal("last visible row must map to an option after scrolling")
+	}
+	if pos, ok := m.visibleAtRow(10, 10); !ok || pos != 4 {
+		t.Fatalf("last visible row = (%d, %v), want (4, true)", pos, ok)
+	}
+}
+
+func TestPhysicalRowsCountsWrapping(t *testing.T) {
+	cases := []struct {
+		text  string
+		width int
+		want  int
+	}{
+		{"one\ntwo", 0, 2},
+		{"1234567890", 10, 1},
+		{"12345678901", 10, 2},
+		{"12345678901234567890", 10, 2},
+		{"one\ntwo", 10, 2},
+		{"\x1b[36m12345\x1b[0m", 5, 1},
+		{"\x1b[36m123456\x1b[0m", 5, 2},
+		{"e\u0301", 1, 1},
+	}
+
+	for _, tc := range cases {
+		if got := physicalRows(tc.text, tc.width); got != tc.want {
+			t.Fatalf("physicalRows(%q, %d) = %d, want %d", tc.text, tc.width, got, tc.want)
+		}
+	}
+}

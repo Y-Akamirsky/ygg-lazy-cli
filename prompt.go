@@ -5,8 +5,11 @@ import (
 	"io"
 	"os"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/AlecAivazis/survey/v2/terminal"
+	"golang.org/x/term"
 )
 
 // errPromptInterrupt is returned when the user presses Ctrl+C.
@@ -146,10 +149,30 @@ func (m *listModel) page() (int, int) {
 	return start, start + size
 }
 
+// visibleAtRow maps an absolute terminal row to a position in the visible
+// list. lastRow is the row the cursor is on after drawing the prompt.
+func (m *listModel) visibleAtRow(row, lastRow int) (int, bool) {
+	start, end := m.page()
+	if end == start {
+		return 0, false
+	}
+
+	firstRow := lastRow - (end - start) + 1
+	if row < firstRow || row > lastRow {
+		return 0, false
+	}
+
+	pos := start + row - firstRow
+	if pos < start || pos >= end {
+		return 0, false
+	}
+	return pos, true
+}
+
 func (m *listModel) render(message string) string {
-	hint := T("Use arrows to move, enter to confirm, type to filter")
+	hint := T("Use arrows or mouse to move, enter to confirm, type to filter")
 	if m.multi {
-		hint = T("Use arrows to move, space to mark, enter to confirm, type to filter")
+		hint = T("Use arrows or mouse to move, space to mark, enter to confirm, type to filter")
 	}
 
 	var b strings.Builder
@@ -196,7 +219,8 @@ type promptScreen struct {
 	out    io.Writer
 	raw    terminal.FileWriter
 	cursor *terminal.Cursor
-	lines  int
+	width  int
+	rows   int
 }
 
 func newPromptScreen() *promptScreen {
@@ -205,31 +229,85 @@ func newPromptScreen() *promptScreen {
 		out:    terminal.NewAnsiStdout(raw),
 		raw:    raw,
 		cursor: &terminal.Cursor{In: os.Stdin, Out: raw},
+		width:  terminalWidth(),
 	}
+}
+
+// terminalWidth returns the visible terminal width or 0 when it is unknown.
+func terminalWidth() int {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width <= 0 {
+		return 0
+	}
+	return width
+}
+
+// physicalRows counts the terminal rows the text occupies, including line
+// wrapping and ignoring ANSI color sequences.
+func physicalRows(text string, width int) int {
+	if width <= 0 {
+		return strings.Count(text, "\n") + 1
+	}
+
+	rows, col := 1, 0
+	for i := 0; i < len(text); {
+		if text[i] == 0x1b && i+1 < len(text) && text[i+1] == '[' {
+			i += 2
+			for i < len(text) && (text[i] < 0x40 || text[i] > 0x7e) {
+				i++
+			}
+			if i < len(text) {
+				i++
+			}
+			continue
+		}
+
+		r, size := utf8.DecodeRuneInString(text[i:])
+		i += size
+		switch {
+		case r == '\n':
+			rows++
+			col = 0
+		case unicode.Is(unicode.Mn, r):
+			// Combining marks do not advance the cursor.
+		default:
+			col++
+			if col > width {
+				rows++
+				col = 1
+			}
+		}
+	}
+	return rows
 }
 
 // clear removes the previously drawn prompt block and leaves the cursor at its
 // first line.
 func (s *promptScreen) clear() {
-	for i := 0; i < s.lines; i++ {
+	if s.rows == 0 {
+		return
+	}
+
+	for i := 1; i < s.rows; i++ {
 		_ = s.cursor.PreviousLine(1)
 	}
-	for i := 0; i <= s.lines; i++ {
+	for i := 0; i < s.rows; i++ {
 		_ = terminal.EraseLine(s.raw, terminal.ERASE_LINE_ALL)
-		if i < s.lines {
+		if i < s.rows-1 {
 			_ = s.cursor.NextLine(1)
 		}
 	}
-	for i := 0; i < s.lines; i++ {
+	for i := 1; i < s.rows; i++ {
 		_ = s.cursor.PreviousLine(1)
 	}
-	s.lines = 0
+	s.rows = 0
 }
 
 func (s *promptScreen) draw(text string) {
 	s.clear()
+	s.width = terminalWidth()
 	fmt.Fprint(s.out, text)
-	s.lines = strings.Count(text, "\n")
+	s.rows = physicalRows(text, s.width)
 }
 
 func (s *promptScreen) finish(text string) {
@@ -239,20 +317,16 @@ func (s *promptScreen) finish(text string) {
 
 // --- Prompts ---
 
-func newPromptReader() *terminal.RuneReader {
-	return terminal.NewRuneReader(terminal.Stdio{In: os.Stdin, Out: os.Stdout, Err: os.Stderr})
-}
-
 // promptList shows a single- or multi-select list and returns the chosen
-// option indices.
+// option indices. The list supports keyboard navigation, filtering and the
+// mouse: a left click picks an item and the wheel moves the cursor.
 func promptList(message string, options []string, defaultIndex, pageSize int, multi bool) ([]int, error) {
 	if len(options) == 0 {
 		return nil, nil
 	}
 
-	reader := newPromptReader()
-	_ = reader.SetTermMode()
-	defer func() { _ = reader.RestoreTermMode() }()
+	reader := newInputReader(true)
+	defer reader.Close()
 
 	screen := newPromptScreen()
 	_ = screen.cursor.Hide()
@@ -262,14 +336,39 @@ func promptList(message string, options []string, defaultIndex, pageSize int, mu
 	for {
 		screen.draw(model.render(message))
 
-		key, _, err := reader.ReadRune()
+		ev, err := reader.ReadEvent()
 		if err != nil {
 			screen.clear()
 			fmt.Fprintln(screen.out)
 			return nil, err
 		}
 
-		switch key {
+		if ev.mouse != nil {
+			switch ev.mouse.button {
+			case mouseWheelUp:
+				model.move(-1)
+			case mouseWheelDown:
+				model.move(1)
+			case mouseLeft:
+				lastRow, err := reader.LastRow()
+				if err != nil {
+					continue
+				}
+				pos, ok := model.visibleAtRow(ev.mouse.y, lastRow)
+				if !ok {
+					continue
+				}
+				model.cursor = pos
+				if multi {
+					model.toggle()
+					continue
+				}
+				return finishList(screen, message, model), nil
+			}
+			continue
+		}
+
+		switch ev.key {
 		case terminal.KeyInterrupt:
 			screen.clear()
 			fmt.Fprintln(screen.out)
@@ -282,9 +381,7 @@ func promptList(message string, options []string, defaultIndex, pageSize int, mu
 			if len(model.visible) == 0 {
 				continue
 			}
-			result := model.result()
-			screen.finish(cyan("? ") + message + "  " + green(model.answer(result)))
-			return result, nil
+			return finishList(screen, message, model), nil
 		case terminal.KeyArrowUp:
 			model.move(-1)
 		case terminal.KeyArrowDown:
@@ -301,27 +398,37 @@ func promptList(message string, options []string, defaultIndex, pageSize int, mu
 				model.refilter()
 			}
 		default:
-			if key >= ' ' && key != terminal.IgnoreKey {
-				model.typeRune(key)
+			if ev.key >= ' ' && ev.key != terminal.IgnoreKey {
+				model.typeRune(ev.key)
 			}
 		}
 	}
 }
 
+// finishList prints the answered prompt and returns the chosen indices.
+func finishList(screen *promptScreen, message string, model *listModel) []int {
+	result := model.result()
+	screen.finish(cyan("? ") + message + "  " + green(model.answer(result)))
+	return result
+}
+
 // readLine reads one line in raw mode, echoing typed characters.
-func readLine(reader *terminal.RuneReader, out io.Writer, initial string) (string, error) {
+func readLine(reader *inputReader, out io.Writer, initial string) (string, error) {
 	line := []rune(initial)
 	if len(line) > 0 {
 		fmt.Fprint(out, initial)
 	}
 
 	for {
-		key, _, err := reader.ReadRune()
+		ev, err := reader.ReadEvent()
 		if err != nil {
 			return "", err
 		}
+		if ev.mouse != nil {
+			continue
+		}
 
-		switch key {
+		switch ev.key {
 		case '\r', '\n':
 			fmt.Fprintln(out)
 			return string(line), nil
@@ -339,18 +446,17 @@ func readLine(reader *terminal.RuneReader, out io.Writer, initial string) (strin
 		case terminal.KeyEscape:
 			// Ignore unknown escape sequences.
 		default:
-			if key >= ' ' && key != terminal.IgnoreKey {
-				line = append(line, key)
-				fmt.Fprint(out, string(key))
+			if ev.key >= ' ' && ev.key != terminal.IgnoreKey {
+				line = append(line, ev.key)
+				fmt.Fprint(out, string(ev.key))
 			}
 		}
 	}
 }
 
 func promptInput(message, defaultValue string) (string, error) {
-	reader := newPromptReader()
-	_ = reader.SetTermMode()
-	defer func() { _ = reader.RestoreTermMode() }()
+	reader := newInputReader(false)
+	defer reader.Close()
 
 	out := terminal.NewAnsiStdout(os.Stdout)
 	fmt.Fprint(out, cyan("? ")+message+" ")
@@ -359,9 +465,8 @@ func promptInput(message, defaultValue string) (string, error) {
 
 // promptConfirm asks a yes/no question and accepts English and Russian answers.
 func promptConfirm(message string, defaultValue bool) (bool, error) {
-	reader := newPromptReader()
-	_ = reader.SetTermMode()
-	defer func() { _ = reader.RestoreTermMode() }()
+	reader := newInputReader(false)
+	defer reader.Close()
 
 	out := terminal.NewAnsiStdout(os.Stdout)
 	for {
