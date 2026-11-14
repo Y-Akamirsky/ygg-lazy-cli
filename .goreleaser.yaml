@@ -30,6 +30,8 @@ brews:
   - repository:
       owner: Y-Akamirsky
       name: homebrew-ygg-lazy-cli
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
 
     homepage: "https://github.com/Y-Akamirsky/ygg-lazy-cli"
     description: "Lazy-way CLI Yggdrasil Network configurator"
