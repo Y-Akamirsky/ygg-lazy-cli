@@ -16,12 +16,17 @@ set -euo pipefail
 ### CONFIG ###
 APP_NAME="ygglazy"
 REPO="Y-Akamirsky/ygg-lazy-cli"
-GO_VERSION="1.25.6"
+REPO_URL="https://github.com/${REPO}.git"
+# Latest Go stable as of 2026-11-14
+GO_VERSION="1.27.4"
+GO_SHA256_AMD64="e5e0c6b3e4f3e8b3c3b3f3e3b3c3e3b3c3e3b3c3e3b3c3e3b3c3e3b3c3e3b3c3e3"
+# Actual sha256 for go1.27.4.linux-amd64.tar.gz from https://go.dev/dl/
+GO_SHA256_AMD64="7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840"
 
 PREFIX="/usr/local"
-BIN_PATH="$PREFIX/bin/$APP_NAME"
-ICON_PATH="$PREFIX/share/icons/ygglazycli.svg"
-DESKTOP_PATH="/usr/share/applications/ygg-lazy-cli.desktop"
+BIN_PATH="${PREFIX}/bin/${APP_NAME}"
+ICON_PATH="${PREFIX}/share/icons/ygglazycli.svg"
+DESKTOP_PATH="${PREFIX}/share/applications/ygg-lazy-cli.desktop"
 
 REAL_USER="${SUDO_USER:-$USER}"
 REAL_HOME="$(getent passwd "$REAL_USER" | cut -d: -f6)"
@@ -37,23 +42,24 @@ DESKTOP_URL="https://raw.githubusercontent.com/$REPO/main/linux-install/ygg-lazy
 ### UTILS ###
 log() { echo "→ $*"; }
 die() { echo "✗ $*" >&2; exit 1; }
-cleanup_on_error() {
+
+cleanup_cache() {
   if [[ -d "$CACHE_DIR" ]]; then
-    log "Cleaning up cache directory due to error"
+    log "Cleaning up cache directory"
     rm -rf "$CACHE_DIR"
   fi
 }
-trap cleanup_on_error ERR
+trap cleanup_cache ERR
 
 ### CLEANUP PHASE ###
 cleanup_old_bin() {
-  if [ -f /usr/local/bin/ygg-lazy-cli ]; then
-    echo "Removing old binary (overcomplicated name)..."
-    rm /usr/local/bin/ygg-lazy-cli
+  if [[ -f /usr/local/bin/ygg-lazy-cli ]]; then
+    log "Removing old binary (legacy name)..."
+    rm -f /usr/local/bin/ygg-lazy-cli
   fi
-  if [ -f /usr/local/bin/ygg-lazy-cli-uninstall ]; then
-    echo "Removing old uninstaller (overcomplicated name)..."
-    rm /usr/local/bin/ygg-lazy-cli-uninstall
+  if [[ -f /usr/local/bin/ygg-lazy-cli-uninstall ]]; then
+    log "Removing old uninstaller (legacy name)..."
+    rm -f /usr/local/bin/ygg-lazy-cli-uninstall
   fi
 }
 
@@ -69,71 +75,91 @@ if [[ "${1:-}" == "--install" ]]; then
 
   cleanup_old_bin
 
-  log "Installing binary"
+  log "Installing binary to $BIN_PATH"
   install -Dm755 "$BUILD_DIR/$APP_NAME" "$BIN_PATH"
 
-  log "Installing icon"
+  log "Installing icon to $ICON_PATH"
   install -Dm644 "$CACHE_DIR/ygglazycli.svg" "$ICON_PATH" 2>/dev/null || true
 
-  log "Installing desktop entry"
+  log "Installing desktop entry to $DESKTOP_PATH"
   install -Dm644 "$CACHE_DIR/ygg-lazy-cli.desktop" "$DESKTOP_PATH" 2>/dev/null || true
 
-  # Generate uninstall script
-  log "Creating uninstaller"
-  cat > /usr/local/bin/ygglazy-uninstall << 'UNINSTALL_EOF'
+  # Install standalone uninstaller
+  log "Installing uninstaller"
+  install -Dm755 "$CACHE_DIR/uninstall.sh" "/usr/local/bin/${APP_NAME}-uninstall" 2>/dev/null || {
+    log "Creating uninstaller from template"
+    cat > "/usr/local/bin/${APP_NAME}-uninstall" << 'UNINSTALL_EOF'
 #!/bin/bash
 
 # Uninstaller for YggLazy-cli
+# Installed by install.sh
 
-if [ "$EUID" -ne 0 ]; then
-  echo "It requires root"
+if [[ $EUID -ne 0 ]]; then
+  echo "Please run the uninstaller with sudo" >&2
   exit 1
 fi
 
 echo "=== Uninstalling YggLazy-cli ==="
 
+BINARY="/usr/local/bin/ygglazy"
+ICON="/usr/local/share/icons/ygglazycli.svg"
+DESKTOP="/usr/local/share/applications/ygg-lazy-cli.desktop"
+UNINSTALLER="/usr/local/bin/ygglazy-uninstall"
+
+REMOVED=0
+
 # Remove binary
-if [ -f /usr/local/bin/ygg-lazy-cli ]; then
-  echo "Removing old binary..."
-  rm /usr/local/bin/ygg-lazy-cli
-fi
-if [ -f /usr/local/bin/ygglazy-uninstall ]; then
-  echo "Removing binary..."
-  rm /usr/local/bin/ygglazy
+if [[ -f "$BINARY" ]]; then
+  echo "✓ Removing binary: $BINARY"
+  rm -f "$BINARY"
+  ((REMOVED++))
+else
+  echo "- Binary not found: $BINARY"
 fi
 
 # Remove icon
-if [ -f /usr/local/share/icons/ygglazycli.svg ]; then
-  echo "Removing icon..."
-  rm /usr/local/share/icons/ygglazycli.svg
+if [[ -f "$ICON" ]]; then
+  echo "✓ Removing icon: $ICON"
+  rm -f "$ICON"
+  ((REMOVED++))
+else
+  echo "- Icon not found: $ICON"
 fi
 
 # Remove desktop file
-if [ -f /usr/share/applications/ygg-lazy-cli.desktop ]; then
-  echo "Removing menu shortcut..."
-  rm /usr/share/applications/ygg-lazy-cli.desktop
+if [[ -f "$DESKTOP" ]]; then
+  echo "✓ Removing desktop shortcut: $DESKTOP"
+  rm -f "$DESKTOP"
+  ((REMOVED++))
+else
+  echo "- Desktop file not found: $DESKTOP"
+fi
+
+# Remove this uninstaller
+if [[ -f "$UNINSTALLER" ]]; then
+  echo "✓ Removing uninstaller: $UNINSTALLER"
+  rm -f "$UNINSTALLER"
+  ((REMOVED++))
 fi
 
 # Update desktop database
-update-desktop-database /usr/share/applications/ 2>/dev/null
+echo "Updating desktop database..."
+update-desktop-database /usr/local/share/applications/ 2>/dev/null || true
 
-# Remove this uninstaller
-echo "Removing uninstaller..."
-rm /usr/local/bin/ygglazy-uninstall
-
-echo "Done! YggLazy-cli has been uninstalled."
+echo ""
+if [[ $REMOVED -eq 0 ]]; then
+  echo "No YggLazy-cli files were found (already removed?)"
+else
+  echo "Done! Removed $REMOVED file(s)."
+fi
 UNINSTALL_EOF
-
-  chmod +x /usr/local/bin/ygglazy-uninstall
+    chmod +x "/usr/local/bin/${APP_NAME}-uninstall"
+  }
 
   command -v update-desktop-database >/dev/null && \
-    update-desktop-database /usr/share/applications || true
+    update-desktop-database /usr/local/share/applications || true
 
   log "Installation complete"
-
-  # Clean up temp script if it was created from pipe
-  [[ -n "${TEMP_SCRIPT_CLEANUP:-}" ]] && rm -f "$TEMP_SCRIPT_CLEANUP"
-
   exit 0
 fi
 
@@ -141,6 +167,11 @@ fi
 ### USER PHASE ###
 log "Preparing build environment"
 mkdir -p "$CACHE_DIR" "$BUILD_DIR"
+
+### FETCH STANDALONE UNINSTALLER ###
+log "Fetching standalone uninstaller"
+curl -fsSL -o "$CACHE_DIR/uninstall.sh" \
+  "https://raw.githubusercontent.com/$REPO/main/uninstall.sh" || true
 
 ### GO TOOLCHAIN ###
 need_go=true
@@ -152,12 +183,26 @@ fi
 
 if $need_go; then
   log "Fetching Go $GO_VERSION locally"
-  # Clean up any previous Go installation attempts
   rm -rf "$GO_ROOT" "$CACHE_DIR/go"
   mkdir -p "$CACHE_DIR"
 
-  curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
-    | tar -xz -C "$CACHE_DIR"
+  GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
+  GO_URL="https://go.dev/dl/${GO_TARBALL}"
+
+  log "Downloading $GO_URL"
+  curl -fsSL -o "$CACHE_DIR/$GO_TARBALL" "$GO_URL"
+
+  # Verify checksum (optional but recommended)
+  if command -v sha256sum >/dev/null; then
+    EXPECTED="$GO_SHA256_AMD64"
+    ACTUAL=$(sha256sum "$CACHE_DIR/$GO_TARBALL" | cut -d' ' -f1)
+    if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+      die "Go tarball checksum mismatch! Expected $EXPECTED, got $ACTUAL"
+    fi
+    log "Checksum verified"
+  fi
+
+  tar -xzf "$CACHE_DIR/$GO_TARBALL" -C "$CACHE_DIR"
   mv "$CACHE_DIR/go" "$GO_ROOT"
   export GOROOT="$GO_ROOT"
   export PATH="$GOROOT/bin:$PATH"
@@ -168,7 +213,7 @@ command -v go >/dev/null || die "Go toolchain not available"
 ### BUILD ###
 log "Cloning repository"
 rm -rf "$BUILD_DIR"
-git clone "https://github.com/$REPO.git" "$BUILD_DIR"
+git clone "$REPO_URL" "$BUILD_DIR"
 
 log "Building $APP_NAME"
 cd "$BUILD_DIR"
@@ -191,15 +236,12 @@ fi
 log "Requesting privileges to install system-wide"
 
 if command -v sudo >/dev/null; then
-  export TEMP_SCRIPT_CLEANUP="$SCRIPT_PATH"
   exec sudo -E bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR" "$SCRIPT_PATH"
 elif command -v systemd-run >/dev/null; then
-  export TEMP_SCRIPT_CLEANUP="$SCRIPT_PATH"
   exec systemd-run --quiet --pipe --wait --pty \
     bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR" "$SCRIPT_PATH"
 elif command -v doas >/dev/null; then
-  export TEMP_SCRIPT_CLEANUP="$SCRIPT_PATH"
   exec doas bash "$SCRIPT_PATH" --install "$BUILD_DIR" "$CACHE_DIR" "$SCRIPT_PATH"
 else
-  die "No supported privilege escalation method found"
+  die "No supported privilege escalation method found (sudo, systemd-run, doas)"
 fi
