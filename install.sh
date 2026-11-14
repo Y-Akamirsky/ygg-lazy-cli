@@ -17,9 +17,9 @@ set -euo pipefail
 APP_NAME="ygglazy"
 REPO="Y-Akamirsky/ygg-lazy-cli"
 REPO_URL="https://github.com/${REPO}.git"
+BRANCH="dev"
 # Latest Go stable as of 2026-11-14
 GO_VERSION="1.27.4"
-GO_SHA256_AMD64="e5e0c6b3e4f3e8b3c3b3f3e3b3c3e3b3c3e3b3c3e3b3c3e3b3c3e3b3c3e3b3c3e3"
 # Actual sha256 for go1.27.4.linux-amd64.tar.gz from https://go.dev/dl/
 GO_SHA256_AMD64="7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840"
 
@@ -36,8 +36,9 @@ CACHE_DIR="$CACHE_BASE/$APP_NAME-installer"
 GO_ROOT="$CACHE_DIR/go-$GO_VERSION"
 BUILD_DIR="$CACHE_DIR/build"
 
-ICON_URL="https://raw.githubusercontent.com/$REPO/main/linux-install/ygglazycli.svg"
-DESKTOP_URL="https://raw.githubusercontent.com/$REPO/main/linux-install/ygg-lazy-cli.desktop"
+DESKTOP_URL="https://raw.githubusercontent.com/$REPO/$BRANCH/linux-install/ygg-lazy-cli.desktop"
+ICON_URL="https://raw.githubusercontent.com/$REPO/$BRANCH/linux-install/ygglazycli.svg"
+UNINSTALL_URL="https://raw.githubusercontent.com/$REPO/$BRANCH/uninstall.sh"
 
 ### UTILS ###
 log() { echo "→ $*"; }
@@ -171,7 +172,7 @@ mkdir -p "$CACHE_DIR" "$BUILD_DIR"
 ### FETCH STANDALONE UNINSTALLER ###
 log "Fetching standalone uninstaller"
 curl -fsSL -o "$CACHE_DIR/uninstall.sh" \
-  "https://raw.githubusercontent.com/$REPO/main/uninstall.sh" || true
+  "$UNINSTALL_URL" || true
 
 ### GO TOOLCHAIN ###
 need_go=true
@@ -211,9 +212,9 @@ fi
 command -v go >/dev/null || die "Go toolchain not available"
 
 ### BUILD ###
-log "Cloning repository"
+log "Cloning repository (branch: $BRANCH)"
 rm -rf "$BUILD_DIR"
-git clone "$REPO_URL" "$BUILD_DIR"
+git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$BUILD_DIR"
 
 log "Building $APP_NAME"
 cd "$BUILD_DIR"
