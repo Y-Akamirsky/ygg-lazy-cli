@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-
-	"github.com/AlecAivazis/survey/v2"
 )
 
 type NetBSDPlatform struct{}
@@ -38,47 +36,47 @@ func (p *NetBSDPlatform) FindConfigPath() string {
 }
 
 func (p *NetBSDPlatform) Install() error {
-	fmt.Println(cyan("=== NetBSD Yggdrasil Installation ==="))
-	
-	choice := ""
-	survey.AskOne(&survey.Select{
-		Message: "Installation Method:",
-		Options: []string{"pkgin (binary package)", "pkgsrc (compile from source)", "Cancel"},
-	}, &choice)
+	fmt.Println(cyan(T("=== NetBSD Yggdrasil Installation ===")))
 
-	if choice == "Cancel" {
-		return fmt.Errorf("installation cancelled")
+	installMethod, _ := askChoice("Installation Method:", []choice{
+		{key: "pkgin (binary package)", label: T("pkgin (binary package)")},
+		{key: "pkgsrc (compile from source)", label: T("pkgsrc (compile from source)")},
+		{key: "Cancel", label: T("Cancel")},
+	}, "", 0)
+
+	if installMethod == "Cancel" || installMethod == "" {
+		return fmt.Errorf("%s", T("installation cancelled"))
 	}
 
-	if choice == "pkgin (binary package)" {
-		fmt.Println("Installing via pkgin...")
+	if installMethod == "pkgin (binary package)" {
+		fmt.Println(T("Installing via pkgin..."))
 		cmd := exec.Command("pkgin", "-y", "install", "yggdrasil")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("pkgin install failed: %v", err)
+			return fmt.Errorf("%s: %v", T("pkgin install failed"), err)
 		}
-		fmt.Println(green("Installation complete."))
+		fmt.Println(green(T("Installation complete.")))
 		return nil
 	}
 
 	// pkgsrc installation
-	fmt.Println("Installing via pkgsrc...")
+	fmt.Println(T("Installing via pkgsrc..."))
 	pkgsrcPath := "/usr/pkgsrc/net/yggdrasil"
-	
+
 	if !fileExists(pkgsrcPath) {
-		fmt.Println(yellow("pkgsrc tree not found. Please install it first."))
-		return fmt.Errorf("pkgsrc tree not available")
+		fmt.Println(yellow(T("pkgsrc tree not found. Please install it first.")))
+		return fmt.Errorf("%s", T("pkgsrc tree not available"))
 	}
 
 	cmd := exec.Command("make", "-C", pkgsrcPath, "install", "clean")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("pkgsrc install failed: %v", err)
+		return fmt.Errorf("%s: %v", T("pkgsrc install failed"), err)
 	}
 
-	fmt.Println(green("Installation complete."))
+	fmt.Println(green(T("Installation complete.")))
 	return nil
 }
 
@@ -93,13 +91,13 @@ func (p *NetBSDPlatform) ManageService(act string) error {
 		return exec.Command("/etc/rc.d/yggdrasil", "restart").Run()
 	case "Enable Autostart":
 		// Add yggdrasil=YES to /etc/rc.conf
-		fmt.Println(yellow("Please add 'yggdrasil=YES' to /etc/rc.conf manually"))
+		fmt.Println(yellow(T("Please add 'yggdrasil=YES' to /etc/rc.conf manually")))
 		return nil
 	case "Disable Autostart":
-		fmt.Println(yellow("Please remove 'yggdrasil=YES' from /etc/rc.conf manually"))
+		fmt.Println(yellow(T("Please remove 'yggdrasil=YES' from /etc/rc.conf manually")))
 		return nil
 	default:
-		return fmt.Errorf("unknown action: %s", act)
+		return fmt.Errorf("%s: %s", T("unknown action"), act)
 	}
 }
 

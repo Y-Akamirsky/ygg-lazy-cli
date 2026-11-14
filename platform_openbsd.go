@@ -36,19 +36,19 @@ func (p *OpenBSDPlatform) FindConfigPath() string {
 }
 
 func (p *OpenBSDPlatform) Install() error {
-	fmt.Println(cyan("=== OpenBSD Yggdrasil Installation ==="))
-	fmt.Println("Installing via pkg_add...")
-	
+	fmt.Println(cyan(T("=== OpenBSD Yggdrasil Installation ===")))
+	fmt.Println(T("Installing via pkg_add..."))
+
 	cmd := exec.Command("pkg_add", "yggdrasil")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("pkg_add failed: %v", err)
+		return fmt.Errorf("%s: %v", T("pkg_add failed"), err)
 	}
 
-	fmt.Println(green("Installation complete."))
-	fmt.Println(yellow("Enable service: rcctl enable yggdrasil"))
-	fmt.Println(yellow("Start service: rcctl start yggdrasil"))
+	fmt.Println(green(T("Installation complete.")))
+	fmt.Println(yellow(T("Enable service: rcctl enable yggdrasil")))
+	fmt.Println(yellow(T("Start service: rcctl start yggdrasil")))
 	return nil
 }
 
@@ -66,7 +66,7 @@ func (p *OpenBSDPlatform) ManageService(act string) error {
 	case "Disable Autostart":
 		return exec.Command("rcctl", "disable", "yggdrasil").Run()
 	default:
-		return fmt.Errorf("unknown action: %s", act)
+		return fmt.Errorf("%s: %s", T("unknown action"), act)
 	}
 }
 

@@ -19,7 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AlecAivazis/survey/v2"
 	"github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/fatih/color"
 )
@@ -27,7 +26,7 @@ import (
 // --- Constants & Vars ---
 
 const (
-	version    = "0.1.6"
+	version    = "1.0.0"
 	repoOwner  = "yggdrasil-network"
 	repoPeers  = "public-peers"
 	windowsExe = `C:\Program Files\Yggdrasil\yggdrasilctl.exe`
@@ -42,6 +41,7 @@ var (
 	yellow    = color.New(color.FgYellow).SprintFunc()
 
 	detectedConfigPath string
+	configPathExplicit bool
 )
 
 // --- Structures ---
@@ -70,31 +70,52 @@ type Peer struct {
 
 func main() {
 	// Parse flags first to allow --version without sudo
+	var customConfigPath string
+	var langValue string
 	installFlag := flag.Bool("ygginstall", false, "Install Yggdrasil automatically")
 	installFlagShort := flag.Bool("i", false, "Install Yggdrasil automatically (shorthand)")
 	versionFlag := flag.Bool("version", false, "Show version information")
 	versionFlagShort := flag.Bool("v", false, "Show version information (shorthand)")
 	helpFlag := flag.Bool("help", false, "Show help information")
 	helpFlagShort := flag.Bool("h", false, "Show help information (shorthand)")
+	flag.StringVar(&langValue, "lang", "auto", "Interface language: auto, en, ru")
+	flag.StringVar(&langValue, "l", "auto", "Interface language: auto, en, ru (shorthand)")
+	flag.StringVar(&customConfigPath, "config", "", "Path to yggdrasil.conf")
+	flag.StringVar(&customConfigPath, "c", "", "Path to yggdrasil.conf (shorthand)")
 
 	// Custom usage function
 	flag.Usage = func() {
-		fmt.Printf("YggLazy-cli version %s - Lazy way to configure Yggdrasil Network!\n\n", version)
-		fmt.Println("USAGE:")
-		fmt.Printf("  %s [OPTIONS]\n\n", "ygglazy")
-		fmt.Println("OPTIONS:")
-		fmt.Println("  -h, --help         Show this help message")
-		fmt.Println("  -v, --version      Show version information")
-		fmt.Println("  -i, --ygginstall   Install Yggdrasil automatically")
-		fmt.Println("\nEXAMPLES:")
-		fmt.Println("  sudo ygglazy                 # Start interactive configurator")
-		fmt.Println("  sudo ygglazy --ygginstall    # Auto-install Yggdrasil")
-		fmt.Println("  ygglazy --version            # Show version (no sudo needed)")
-		fmt.Println("\nFor more information, visit:")
+		fmt.Println(T("YggLazy-cli version %s - Lazy way to configure Yggdrasil Network!", version))
+		fmt.Println()
+		fmt.Println(T("USAGE:"))
+		fmt.Println()
+		fmt.Println("  ygglazy [OPTIONS]")
+		fmt.Println()
+		fmt.Println(T("OPTIONS:"))
+		fmt.Println("  -h, --help           " + T("Show this help message"))
+		fmt.Println("  -v, --version        " + T("Show version information"))
+		fmt.Println("  -i, --ygginstall     " + T("Install Yggdrasil automatically"))
+		fmt.Println("  -c, --config PATH    " + T("Use a custom yggdrasil.conf path"))
+		fmt.Println("  -l, --lang LANG      " + T("Set interface language: auto, en, ru"))
+		fmt.Println()
+		fmt.Println(T("EXAMPLES:"))
+		fmt.Println("  sudo ygglazy                        # " + T("Start interactive configurator"))
+		fmt.Println("  sudo ygglazy --ygginstall           # " + T("Auto-install Yggdrasil"))
+		fmt.Println("  sudo ygglazy -c /path/to/conf       # " + T("Use a custom config file"))
+		fmt.Println("  ygglazy --version                   # " + T("Show version (no sudo needed)"))
+		fmt.Println()
+		fmt.Println(T("For more information, visit:"))
 		fmt.Println("  https://github.com/Y-Akamirsky/ygg-lazy-cli")
 	}
 
 	flag.Parse()
+
+	// Apply the interface language before any other output. An explicit flag
+	// wins; --lang auto falls back to the OS locale.
+	if err := setLanguage(langValue); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 
 	// Handle Help Flag
 	if *helpFlag || *helpFlagShort {
@@ -104,46 +125,110 @@ func main() {
 
 	// Handle Version Flag (no admin required)
 	if *versionFlag || *versionFlagShort {
-		fmt.Printf("YggLazy version %s\n", version)
-		fmt.Printf("Built with Go %s\n", runtime.Version())
-		fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		fmt.Println(T("YggLazy version %s", version))
+		fmt.Println(T("Built with Go %s", runtime.Version()))
+		fmt.Println(T("OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 		return
 	}
 
 	// Check/Request Admin Privileges for other operations
 	currentPlatform.EnsureAdmin()
 
-	detectedConfigPath = currentPlatform.FindConfigPath()
+	// Resolve the config path: explicit --config|-c wins over platform defaults
+	if customConfigPath != "" {
+		path, err := resolveConfigPath(customConfigPath)
+		if err != nil {
+			fmt.Println(red(T("Invalid config path: ")), err)
+			os.Exit(1)
+		}
+		detectedConfigPath = path
+		configPathExplicit = true
+	} else {
+		detectedConfigPath = currentPlatform.FindConfigPath()
+	}
 
 	// Handle Install Flag
-	if *installFlag {
+	if *installFlag || *installFlagShort {
 		installYggdrasil()
 		return
 	}
 
-	if *installFlagShort {
-		installYggdrasil()
-		return
-	}
-
-	// Check if config actually exists on disk
-	if !fileExists(detectedConfigPath) {
-		color.Yellow("Config file not found (%s).", detectedConfigPath)
-		confirm := false
-		survey.AskOne(&survey.Confirm{Message: "Yggdrasil config missing. Install/Generate now?"}, &confirm)
-		if confirm {
-			installYggdrasil()
-			detectedConfigPath = currentPlatform.FindConfigPath()
-		} else {
-			fmt.Println("Exiting.")
-			os.Exit(0)
-		}
-	}
+	// Check installation by the yggdrasil binary, then by config presence
+	ensureInstalled()
+	ensureConfig()
 
 	mainMenu()
 }
 
 // --- Path & Menu Helpers ---
+
+type choice struct {
+	key   string
+	label string
+}
+
+// askChoice shows localized labels and returns the stable internal key.
+func askChoice(message string, choices []choice, defaultKey string, pageSize int) (string, error) {
+	labels := make([]string, len(choices))
+	defaultIndex := -1
+	for i, c := range choices {
+		labels[i] = c.label
+		if c.key == defaultKey {
+			defaultIndex = i
+		}
+	}
+
+	indices, err := promptList(T(message), labels, defaultIndex, pageSize, false)
+	if err != nil || len(indices) == 0 {
+		return "", err
+	}
+	return choices[indices[0]].key, nil
+}
+
+// askKeysSelect builds choices from canonical keys translated via T.
+func askKeysSelect(message string, keys []string, defaultKey string) (string, error) {
+	choices := make([]choice, len(keys))
+	for i, key := range keys {
+		choices[i] = choice{key: key, label: T(key)}
+	}
+	return askChoice(message, choices, defaultKey, 0)
+}
+
+func languageMenu() {
+	clearScreen()
+	fmt.Println(cyan(T("Select language:")))
+	fmt.Println()
+
+	selected, err := askChoice("Select language:", []choice{
+		{key: string(LangEN), label: "English"},
+		{key: string(LangRU), label: "Русский"},
+		{key: "back", label: T("Back")},
+	}, string(currentLang), 0)
+	if err == errPromptInterrupt || selected == "back" || selected == "" {
+		return
+	}
+
+	currentLang = Lang(selected)
+	fmt.Println(green(T("Language changed.")))
+	waitContinue()
+}
+
+func serviceLabel(command string) string {
+	switch strings.ToLower(command) {
+	case "start":
+		return T("Start")
+	case "stop":
+		return T("Stop")
+	case "restart":
+		return T("Restart")
+	case "enable autostart":
+		return T("Enable Autostart")
+	case "disable autostart":
+		return T("Disable Autostart")
+	default:
+		return command
+	}
+}
 
 // --- Menus ---
 
@@ -151,33 +236,42 @@ func mainMenu() {
 	for {
 		clearScreen()
 		printBanner()
-		fmt.Printf("Config loaded: %s\n", detectedConfigPath)
+		fmt.Println(T("Config loaded: %s", detectedConfigPath))
 
 		peers := getConfigPeers()
-		fmt.Printf("Active peers in config: %d\n\n", len(peers))
+		fmt.Println(T("Active peers in config: %d", len(peers)))
+		fmt.Println()
 
-		mode := ""
-		prompt := &survey.Select{
-			Message: "Main Menu:",
-			Options: []string{
-				"Auto-select Peers (Best Latency)",
-				"Manual Peer Selection",
-				"View Configured Peers",
-				"Check Active Peers Status",
-				"Remove Dead Peers",
-				"Remove Peers",
-				"Add Custom Peer",
-				"Node Status",
-				"Service Control",
-				"Exit",
-			},
-			PageSize: 12,
+		keys := []string{
+			"Auto-select Peers (Best Latency)",
+			"Manual Peer Selection",
+			"View Configured Peers",
+			"Check Active Peers Status",
+			"Remove Dead Peers",
+			"Remove Peers",
+			"Add Custom Peer",
+			"Node Status",
+			"Service Control",
+			"Language",
+			"Exit",
+		}
+		choices := make([]choice, len(keys))
+		for i, key := range keys {
+			label := T(key)
+			if key == "Language" {
+				label = "Language / Язык"
+			}
+			choices[i] = choice{key: key, label: label}
 		}
 
-		err := survey.AskOne(prompt, &mode)
-		if err == terminal.InterruptErr {
-			fmt.Println("Bye!")
-			os.Exit(0)
+		mode, err := askChoice("Main Menu:", choices, "", 12)
+		if err != nil {
+			if err == errPromptInterrupt {
+				fmt.Println(T("Bye!"))
+				os.Exit(0)
+			}
+			fmt.Println(red(T("Error: ")), err)
+			return
 		}
 
 		switch mode {
@@ -199,8 +293,10 @@ func mainMenu() {
 			showStatus()
 		case "Service Control":
 			serviceMenu()
+		case "Language":
+			languageMenu()
 		case "Exit":
-			fmt.Println("Bye!")
+			fmt.Println(T("Bye!"))
 			os.Exit(0)
 		}
 	}
@@ -209,83 +305,199 @@ func mainMenu() {
 func serviceMenu() {
 	for {
 		clearScreen()
-		action := ""
-		serviceOptions := append(currentPlatform.GetServiceCommands(), "Back")
-		prompt := &survey.Select{
-			Message: "Service Control (Esc to back):",
-			Options: serviceOptions,
+		actions := currentPlatform.GetServiceCommands()
+		choices := make([]choice, 0, len(actions)+1)
+		for _, action := range actions {
+			choices = append(choices, choice{key: action, label: serviceLabel(action)})
 		}
-		err := survey.AskOne(prompt, &action)
-		if err == terminal.InterruptErr || action == "Back" {
+		choices = append(choices, choice{key: "Back", label: T("Back")})
+
+		action, err := askChoice("Service Control (Esc to back):", choices, "", 0)
+		if err == errPromptInterrupt || action == "Back" {
 			return
 		}
-		if err := currentPlatform.ManageService(action); err != nil {
-			fmt.Println(red("Service operation failed: "), err)
-		} else {
-			fmt.Println(green("Done."))
+		if action == "" {
+			return
 		}
-		waitEnter()
+
+		if err := currentPlatform.ManageService(action); err != nil {
+			fmt.Println(red(T("Service operation failed: ")), err)
+		} else {
+			fmt.Println(green(T("Done.")))
+		}
+		waitContinue()
 	}
 }
 
 func viewCurrentPeers() {
 	clearScreen()
-	fmt.Println(cyan("=== Currently Configured Peers ==="))
+	fmt.Println(cyan(T("=== Currently Configured Peers ===")))
 	peers := getConfigPeers()
 
 	if len(peers) == 0 {
-		fmt.Println(yellow("No peers found in config."))
+		fmt.Println(yellow(T("No peers found in config.")))
 	} else {
 		for i, p := range peers {
 			fmt.Printf("%d. %s\n", i+1, p)
 		}
 	}
-	waitEnter()
+	waitContinue()
 }
 
 // --- Logic: Installation ---
 
-func installYggdrasil() {
-	fmt.Println(cyan("=== Yggdrasil Installer ==="))
-
-	if err := currentPlatform.Install(); err != nil {
-		fmt.Println(red("Installation failed: "), err)
-		waitEnter()
+// ensureInstalled verifies that the yggdrasil binary is available in PATH
+// instead of relying on the presence of a config file.
+func ensureInstalled() {
+	if yggdrasilInstalled() {
 		return
 	}
 
-	detectedConfigPath = currentPlatform.FindConfigPath()
-	if !fileExists(detectedConfigPath) {
-		fmt.Println("Generating config...")
-		cmdName := "yggdrasil"
-		if isWindows {
-			cmdName = `C:\Program Files\Yggdrasil\yggdrasil.exe`
-		}
+	fmt.Println(yellow(T("Yggdrasil is not installed: no yggdrasil binary found in PATH.")))
+	fmt.Println(yellow(T("Automatic installation is experimental. Installing Yggdrasil separately is recommended.")))
+	if !askConfirm("Install Yggdrasil now?", false) {
+		fmt.Println(T("Exiting."))
+		os.Exit(0)
+	}
 
-		// Try to generate
-		out, err := exec.Command(cmdName, "-genconf").Output()
-		if err == nil && len(out) > 0 {
-			dir := filepath.Dir(detectedConfigPath)
-			os.MkdirAll(dir, 0755)
-			os.WriteFile(detectedConfigPath, out, 0644)
-			fmt.Println(green("Config generated at " + detectedConfigPath))
+	installYggdrasil()
+	if !yggdrasilInstalled() {
+		fmt.Println(red(T("Yggdrasil installation did not complete. Exiting.")))
+		os.Exit(1)
+	}
+}
+
+// ensureConfig checks that the resolved config exists and offers guidance
+// when it is missing.
+func ensureConfig() {
+	if fileExists(detectedConfigPath) {
+		return
+	}
+
+	if configPathExplicit {
+		fmt.Println(red(T("Config file not found: ")), detectedConfigPath)
+		fmt.Println(yellow(T("Check that the path is correct and that the file exists.")))
+		os.Exit(1)
+	}
+
+	printMissingConfigHelp()
+	if !askConfirm("Generate yggdrasil.conf now?", true) {
+		fmt.Println(T("Exiting."))
+		os.Exit(0)
+	}
+
+	fmt.Println(T("Generating config..."))
+	if err := generateConfig(detectedConfigPath); err != nil {
+		fmt.Println(red(T("Failed to generate config: ")), err)
+		fmt.Printf("%s %s\n", yellow(T("Generate it manually with:")), configGenCommand(detectedConfigPath))
+		waitContinue()
+		os.Exit(1)
+	}
+	fmt.Println(green(T("Config generated at %s", detectedConfigPath)))
+}
+
+func printMissingConfigHelp() {
+	fmt.Println(red(T("Yggdrasil config not found in the default directory.")))
+	fmt.Println(T("Expected path: %s", detectedConfigPath))
+	fmt.Println()
+	fmt.Println(yellow(T("Make sure that yggdrasil.conf is generated:")))
+	fmt.Printf("  %s\n\n", configGenCommand(detectedConfigPath))
+	fmt.Println(yellow(T("Or specify a different config path with the --config|-c flag, for example:")))
+	fmt.Printf("  %s\n\n", customConfigCommand("/path/to/yggdrasil.conf"))
+}
+
+func configGenCommand(path string) string {
+	prefix := ""
+	if !isWindows {
+		prefix = "sudo "
+	}
+	return fmt.Sprintf("%syggdrasil -genconf > %s", prefix, path)
+}
+
+func customConfigCommand(path string) string {
+	prefix := ""
+	if !isWindows {
+		prefix = "sudo "
+	}
+	return fmt.Sprintf("%sygglazy --config %s", prefix, path)
+}
+
+func installYggdrasil() {
+	fmt.Println(cyan(T("=== Yggdrasil Installer ===")))
+
+	if err := currentPlatform.Install(); err != nil {
+		fmt.Println(red(T("Installation failed: ")), err)
+		waitContinue()
+		return
+	}
+
+	// Re-detect the platform default after installation (a package may place
+	// the config in a different location), but never override an explicit path.
+	if !configPathExplicit {
+		detectedConfigPath = currentPlatform.FindConfigPath()
+	}
+
+	if !fileExists(detectedConfigPath) {
+		fmt.Println(T("Generating config..."))
+		if err := generateConfig(detectedConfigPath); err != nil {
+			fmt.Println(red(T("Failed to generate config automatically: ")), err)
+			fmt.Println(yellow(T("Check if Yggdrasil is in PATH, or generate it manually with:")))
+			fmt.Printf("  %s\n", configGenCommand(detectedConfigPath))
 		} else {
-			fmt.Println(red("Failed to generate config automatically. Check if Yggdrasil is in PATH."))
+			fmt.Println(green(T("Config generated at %s", detectedConfigPath)))
 		}
 	}
-	waitEnter()
+	waitContinue()
+}
+
+// yggdrasilBinary resolves the yggdrasil executable via PATH, with a Windows
+// fallback for the default MSI installation directory.
+func yggdrasilBinary() (string, error) {
+	if path, err := exec.LookPath("yggdrasil"); err == nil {
+		return path, nil
+	}
+	if isWindows {
+		path := `C:\Program Files\Yggdrasil\yggdrasil.exe`
+		if fileExists(path) {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("%s", T("yggdrasil binary not found in PATH"))
+}
+
+func yggdrasilInstalled() bool {
+	_, err := yggdrasilBinary()
+	return err == nil
+}
+
+func generateConfig(path string) error {
+	bin, err := yggdrasilBinary()
+	if err != nil {
+		return err
+	}
+	out, err := exec.Command(bin, "-genconf").Output()
+	if err != nil {
+		return fmt.Errorf("%s", T("yggdrasil -genconf failed: %v", err))
+	}
+	if len(out) == 0 {
+		return fmt.Errorf("%s", T("yggdrasil -genconf returned empty output"))
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, out, 0644)
 }
 
 // Helper function to keep code clean (used in Debian/Fedora blocks)
 
 func runCommands(cmds [][]string) error {
 	for _, c := range cmds {
-		fmt.Printf("Running: %s\n", strings.Join(c, " "))
+		fmt.Println(T("Running: %s", strings.Join(c, " ")))
 		cmd := exec.Command(c[0], c[1:]...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("step failed (%s): %v", c[0], err)
+			return fmt.Errorf("%s: %v", c[0], err)
 		}
 	}
 	return nil
@@ -294,7 +506,7 @@ func runCommands(cmds [][]string) error {
 // --- Logic: GitHub & Peers ---
 
 func fetchPeersStructure() (map[string][]string, error) {
-	fmt.Println("Scanning repository...")
+	fmt.Println(T("Scanning repository..."))
 	resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/git/trees/master?recursive=1", repoOwner, repoPeers))
 	if err != nil {
 		return nil, err
@@ -354,7 +566,7 @@ func fetchPeersFromURLs(urls []string) []string {
 func autoAddPeers() {
 	regionMap, err := fetchPeersStructure()
 	if err != nil {
-		fmt.Println(red("Error: "), err)
+		fmt.Println(red(T("Error: ")), err)
 		return
 	}
 
@@ -365,21 +577,15 @@ func autoAddPeers() {
 	}
 	sort.Strings(regions)
 
-	// Build region options
-	regionOptions := []string{"All regions"}
-	regionOptions = append(regionOptions, regions...)
-	regionOptions = append(regionOptions, "Cancel")
-
 	// Ask user to select region
-	regionPrompt := &survey.Select{
-		Message: "Select region to test peers from:",
-		Options: regionOptions,
-		Default: "All regions",
+	regionChoices := []choice{{key: "All regions", label: T("All regions")}}
+	for _, region := range regions {
+		regionChoices = append(regionChoices, choice{key: region, label: region})
 	}
-	var selectedRegion string
-	survey.AskOne(regionPrompt, &selectedRegion)
+	regionChoices = append(regionChoices, choice{key: "Cancel", label: T("Cancel")})
 
-	if selectedRegion == "Cancel" {
+	selectedRegion, regionErr := askChoice("Select region to test peers from:", regionChoices, "All regions", 0)
+	if regionErr != nil || selectedRegion == "Cancel" || selectedRegion == "" {
 		return
 	}
 
@@ -389,14 +595,14 @@ func autoAddPeers() {
 		for _, u := range regionMap {
 			allUrls = append(allUrls, u...)
 		}
-		fmt.Printf("Fetching from %d regions...\n", len(regionMap))
+		fmt.Println(T("Fetching from %d regions...", len(regionMap)))
 	} else {
 		allUrls = regionMap[selectedRegion]
-		fmt.Printf("Fetching peers from %s region...\n", cyan(selectedRegion))
+		fmt.Println(T("Fetching peers from %s region...", cyan(selectedRegion)))
 	}
 
 	allPeers := fetchPeersFromURLs(allUrls)
-	fmt.Printf("Total peers found: %d. Testing all...\n", len(allPeers))
+	fmt.Println(T("Total peers found: %d. Testing all...", len(allPeers)))
 
 	// Shuffle
 	for i := range allPeers {
@@ -415,9 +621,9 @@ func autoAddPeers() {
 	workers := 20
 	peerChan := make(chan string, limit)
 
-	fmt.Printf("Testing %d peers with 5 attempts each...\n", limit)
-	fmt.Println(yellow("Note: Final peer verification happens after adding them to config."))
-	fmt.Println(yellow("Use 'Check Active Peers Status' to verify and 'Remove Dead Peers' to clean up."))
+	fmt.Println(T("Testing %d peers with 5 attempts each...", limit))
+	fmt.Println(yellow(T("Note: Final peer verification happens after adding them to config.")))
+	fmt.Println(yellow(T("Use 'Check Active Peers Status' to verify and 'Remove Dead Peers' to clean up.")))
 	fmt.Println()
 
 	// Start workers
@@ -434,10 +640,10 @@ func autoAddPeers() {
 				// Accept peers with reasonable latency
 				if peer.Latency < 5*time.Second {
 					ranked = append(ranked, peer)
-					fmt.Printf("\r[%d/%d] ✓ Found %d peers (last: %s, jitter: %s)",
-						tested, limit, len(ranked), peer.Latency, peer.Jitter)
+					fmt.Print("\r", T("[%d/%d] ✓ Found %d peers (last: %s, jitter: %s)",
+						tested, limit, len(ranked), peer.Latency, peer.Jitter))
 				} else {
-					fmt.Printf("\r[%d/%d] ✗ Testing... (%d peers found)", tested, limit, len(ranked))
+					fmt.Print("\r", T("[%d/%d] ✗ Testing... (%d peers found)", tested, limit, len(ranked)))
 				}
 				mu.Unlock()
 			}
@@ -463,23 +669,24 @@ func autoAddPeers() {
 	})
 
 	// Print summary statistics
-	fmt.Printf("\n%s\n", cyan("=== Testing Summary ==="))
-	fmt.Printf("Total peers tested: %d\n", limit)
-	fmt.Printf("Peers found: %s\n", green(fmt.Sprintf("%d", len(ranked))))
+	fmt.Println()
+	fmt.Println(cyan(T("=== Testing Summary ===")))
+	fmt.Println(T("Total peers tested: %d", limit))
+	fmt.Println(T("Peers found: %s", green(fmt.Sprintf("%d", len(ranked)))))
 
 	if len(ranked) > 0 {
-		fmt.Printf("Best latency: %s\n", green(ranked[0].Latency.String()))
-		fmt.Printf("Best stability: %.2f%%\n", (1.0-ranked[0].Stability)*100)
+		fmt.Println(T("Best latency: %s", green(ranked[0].Latency.String())))
+		fmt.Println(T("Best stability: %.2f%%", (1.0-ranked[0].Stability)*100))
 	}
 	fmt.Println()
 
 	if len(ranked) == 0 {
-		fmt.Println(yellow("No reachable peers found with latency < 5s."))
-		fmt.Println(yellow("This might mean:"))
-		fmt.Println(yellow("  - Network connectivity issues"))
-		fmt.Println(yellow("  - Firewall blocking connections"))
-		fmt.Println(yellow("  - All peers are currently down"))
-		waitEnter()
+		fmt.Println(yellow(T("No reachable peers found with latency < 5s.")))
+		fmt.Println(yellow(T("This might mean:")))
+		fmt.Println(yellow(T("  - Network connectivity issues")))
+		fmt.Println(yellow(T("  - Firewall blocking connections")))
+		fmt.Println(yellow(T("  - All peers are currently down")))
+		waitContinue()
 		return
 	}
 
@@ -489,7 +696,8 @@ func autoAddPeers() {
 		displayCount = len(ranked)
 	}
 
-	fmt.Println(green("\nTop Peers by Latency & Stability:"))
+	fmt.Println()
+	fmt.Println(green(T("Top Peers by Latency & Stability:")))
 	for i := 0; i < displayCount; i++ {
 		stability := "excellent"
 		stabilityPercent := (1.0 - ranked[i].Stability) * 100
@@ -503,30 +711,27 @@ func autoAddPeers() {
 			stability = "unstable"
 		}
 
-		fmt.Printf("%d. %s\n   Latency: %s (min: %s, max: %s, jitter: %s) - %s (%.0f%%)\n",
+		fmt.Print(T("%d. %s\n   Latency: %s (min: %s, max: %s, jitter: %s) - %s (%.0f%%)\n",
 			i+1, ranked[i].URI, ranked[i].Latency, ranked[i].MinLatency,
-			ranked[i].MaxLatency, ranked[i].Jitter, stability, stabilityPercent)
+			ranked[i].MaxLatency, ranked[i].Jitter, T(stability), stabilityPercent))
 	}
 	if len(ranked) > displayCount {
-		fmt.Printf("\n(+%d more peers available)\n", len(ranked)-displayCount)
+		fmt.Println()
+		fmt.Println(T("(+%d more peers available)", len(ranked)-displayCount))
 	}
 
 	// Ask how many peers to add
 	countToAdd := 0
-	maxPeers := len(ranked)
-	if maxPeers > 10 {
-		maxPeers = 10
+	countChoice, err := askKeysSelect(
+		"How many of the best peers would you like to add?",
+		[]string{"3 peers (recommended)", "5 peers", "7 peers", "10 peers", "Custom number", "Cancel"},
+		"3 peers (recommended)",
+	)
+	if err != nil {
+		return
 	}
 
-	prompt := &survey.Select{
-		Message: "How many of the best peers would you like to add?",
-		Options: []string{"3 peers (recommended)", "5 peers", "7 peers", "10 peers", "Custom number", "Cancel"},
-		Default: "3 peers (recommended)",
-	}
-	var choice string
-	survey.AskOne(prompt, &choice)
-
-	switch choice {
+	switch countChoice {
 	case "3 peers (recommended)":
 		countToAdd = 3
 	case "5 peers":
@@ -536,15 +741,14 @@ func autoAddPeers() {
 	case "10 peers":
 		countToAdd = 10
 	case "Custom number":
-		customPrompt := &survey.Input{
-			Message: fmt.Sprintf("Enter number of peers to add (1-%d):", len(ranked)),
+		customStr, err := promptInput(T("Enter number of peers to add (1-%d):", len(ranked)), "")
+		if err != nil {
+			return
 		}
-		var customStr string
-		survey.AskOne(customPrompt, &customStr)
 		fmt.Sscanf(customStr, "%d", &countToAdd)
 		if countToAdd < 1 || countToAdd > len(ranked) {
-			fmt.Println(red("Invalid number. Canceling."))
-			waitEnter()
+			fmt.Println(red(T("Invalid number. Canceling.")))
+			waitContinue()
 			return
 		}
 	case "Cancel":
@@ -556,15 +760,14 @@ func autoAddPeers() {
 	}
 
 	toAdd := []string{}
-	fmt.Println(green("\nPeers to add:"))
+	fmt.Println(green(T("Peers to add:")))
 	for i := 0; i < countToAdd; i++ {
-		fmt.Printf("%d. %s (%s avg, jitter: %s)\n", i+1, ranked[i].URI,
-			ranked[i].Latency, ranked[i].Jitter)
+		fmt.Println(T("%d. %s (%s avg, jitter: %s)", i+1, ranked[i].URI,
+			ranked[i].Latency, ranked[i].Jitter))
 		toAdd = append(toAdd, ranked[i].URI)
 	}
 
-	confirm := false
-	survey.AskOne(&survey.Confirm{Message: "Confirm adding these peers?"}, &confirm)
+	confirm := askConfirm("Confirm adding these peers?", true)
 	if confirm {
 		addPeersToConfig(toAdd)
 		restartServicePrompt()
@@ -583,23 +786,30 @@ func manualAddPeers() {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		keys = append(keys, "Back")
 
-		selReg := ""
-		err = survey.AskOne(&survey.Select{Message: "Region:", Options: keys}, &selReg)
-		if err == terminal.InterruptErr || selReg == "Back" {
+		regionChoices := make([]choice, 0, len(keys)+1)
+		for _, key := range keys {
+			regionChoices = append(regionChoices, choice{key: key, label: key})
+		}
+		regionChoices = append(regionChoices, choice{key: "Back", label: T("Back")})
+
+		selReg, err := askChoice("Region:", regionChoices, "", 0)
+		if err == errPromptInterrupt || selReg == "Back" || selReg == "" {
 			return
 		}
 
 		peers := fetchPeersFromURLs(regionMap[selReg])
 		if len(peers) == 0 {
-			fmt.Println("No peers.")
-			waitEnter()
+			fmt.Println(T("No peers."))
+			waitContinue()
 			continue
 		}
-		selPeers := []string{}
-		err = survey.AskOne(&survey.MultiSelect{Message: "Select Peers:", Options: peers}, &selPeers)
-		if err == nil && len(selPeers) > 0 {
+		indices, err := promptList(T("Select Peers:"), peers, -1, 0, true)
+		if err == nil && len(indices) > 0 {
+			selPeers := make([]string, len(indices))
+			for i, index := range indices {
+				selPeers[i] = peers[index]
+			}
 			addPeersToConfig(selPeers)
 			restartServicePrompt()
 		}
@@ -609,21 +819,25 @@ func manualAddPeers() {
 func removePeersMenu() {
 	current := getConfigPeers()
 	if len(current) == 0 {
-		fmt.Println(yellow("No peers in config."))
-		waitEnter()
+		fmt.Println(yellow(T("No peers in config.")))
+		waitContinue()
 		return
 	}
-	toRemove := []string{}
-	err := survey.AskOne(&survey.MultiSelect{Message: "Select to Remove:", Options: current}, &toRemove)
-	if err == nil && len(toRemove) > 0 {
-		removePeersFromConfig(toRemove)
-		restartServicePrompt()
+	indices, err := promptList(T("Select to Remove:"), current, -1, 0, true)
+	if err == nil && len(indices) > 0 {
+		toRemove := make([]string, len(indices))
+		for i, index := range indices {
+			toRemove[i] = current[index]
+		}
+		if askConfirm("Remove selected peers from config?", false) {
+			removePeersFromConfig(toRemove)
+			restartServicePrompt()
+		}
 	}
 }
 
 func addCustomPeer() {
-	input := ""
-	err := survey.AskOne(&survey.Input{Message: "Enter URIs (space separated):"}, &input)
+	input, err := promptInput(T("Enter URIs (space separated):"), "")
 	if err == nil && input != "" {
 		addPeersToConfig(strings.Fields(input))
 		restartServicePrompt()
@@ -631,6 +845,26 @@ func addCustomPeer() {
 }
 
 // --- Logic: Config Writer V4 (Clean formatting) ---
+
+// peersCloseRE matches the closing bracket of the Peers array: the first line
+// that contains only "]" (optionally indented and with trailing spaces). This
+// avoids matching the square brackets used by IPv6 addresses.
+var peersCloseRE = regexp.MustCompile(`(?m)^[ \t]*\][ \t]*(?:\r?\n|$)`)
+
+// peersBlockBounds returns the byte range of the "Peers: [...]" block,
+// including the closing bracket and its line ending.
+func peersBlockBounds(content string) (start, end int, ok bool) {
+	start = strings.Index(content, "Peers: [")
+	if start == -1 {
+		return 0, 0, false
+	}
+	rest := content[start+len("Peers: ["):]
+	loc := peersCloseRE.FindStringIndex(rest)
+	if loc == nil {
+		return 0, 0, false
+	}
+	return start, start + len("Peers: [") + loc[1], true
+}
 
 func getConfigPeers() []string {
 	contentBytes, err := os.ReadFile(detectedConfigPath)
@@ -640,21 +874,10 @@ func getConfigPeers() []string {
 	content := string(contentBytes)
 	var peers []string
 
-	startIdx := strings.Index(content, "Peers: [")
-	if startIdx == -1 {
+	startIdx, endIdx, ok := peersBlockBounds(content)
+	if !ok {
 		return peers
 	}
-	// Look for closing bracket with proper indentation (not IPv6 bracket)
-	// Search for "\n  ]" or "\n]" which marks the end of the Peers array
-	endIdx := strings.Index(content[startIdx:], "\n  ]")
-	if endIdx == -1 {
-		// Try alternative formatting
-		endIdx = strings.Index(content[startIdx:], "\n]")
-	}
-	if endIdx == -1 {
-		return peers
-	}
-	endIdx += startIdx
 
 	block := content[startIdx:endIdx]
 	// Improved regex to properly handle IPv6 addresses in square brackets
@@ -668,13 +891,7 @@ func getConfigPeers() []string {
 }
 
 func addPeersToConfig(newPeers []string) {
-	contentBytes, err := os.ReadFile(detectedConfigPath)
-	if err != nil {
-		return
-	}
-	content := string(contentBytes)
-
-	// Combine existing peers + new peers
+	// Combine existing peers + new peers (skip duplicates)
 	existing := getConfigPeers()
 	finalList := existing
 	for _, p := range newPeers {
@@ -690,43 +907,14 @@ func addPeersToConfig(newPeers []string) {
 		}
 	}
 
-	// Rebuild the "Peers: [...]" block entirely
-	newBlock := "Peers: ["
-	for _, p := range finalList {
-		newBlock += fmt.Sprintf("\n  %s", p) // Indent 2 spaces
+	if err := writeConfigPeers(finalList); err != nil {
+		fmt.Println(red(T("Failed to update config: ")), err)
+		return
 	}
-	newBlock += "\n]"
-
-	// Inject into file
-	startIdx := strings.Index(content, "Peers: [")
-	if startIdx != -1 {
-		// Found existing block, replace it
-		// Look for properly formatted closing bracket (not IPv6 bracket)
-		closingPattern := "\n  ]"
-		endIdx := strings.Index(content[startIdx:], closingPattern)
-		if endIdx == -1 {
-			closingPattern = "\n]"
-			endIdx = strings.Index(content[startIdx:], closingPattern)
-		}
-		if endIdx != -1 {
-			// Skip past the entire closing pattern including the bracket
-			endIdx = startIdx + endIdx + len(closingPattern)
-			newContent := content[:startIdx] + newBlock + content[endIdx:]
-			os.WriteFile(detectedConfigPath, []byte(newContent), 0644)
-			fmt.Println(green("Peers added and config formatted."))
-			return
-		}
-	}
-
-	// Block not found, append to end
-	f, _ := os.OpenFile(detectedConfigPath, os.O_APPEND|os.O_WRONLY, 0644)
-	f.WriteString("\n" + newBlock + "\n")
-	f.Close()
-	fmt.Println(green("Peers block appended."))
+	fmt.Println(green(T("Peers added and config formatted.")))
 }
 
 func removePeersFromConfig(toRemove []string) {
-	// Re-use logic: Get current -> Filter -> Re-add remaining
 	current := getConfigPeers()
 	var keep []string
 
@@ -743,36 +931,61 @@ func removePeersFromConfig(toRemove []string) {
 		}
 	}
 
-	// Reconstruct the block manually to overwrite file
-	contentBytes, err := os.ReadFile(detectedConfigPath)
-	if err != nil {
+	if err := writeConfigPeers(keep); err != nil {
+		fmt.Println(red(T("Failed to update config: ")), err)
 		return
 	}
+	fmt.Println(green(T("Peers removed.")))
+}
+
+// writeConfigPeers rewrites the "Peers: [...]" block in the detected config.
+func writeConfigPeers(peers []string) error {
+	return writePeersToFile(detectedConfigPath, peers)
+}
+
+// writePeersToFile replaces the whole Peers block instead of patching it.
+// Rebuilding the block also cleans up blank lines left by previous edits.
+func writePeersToFile(path string, peers []string) error {
+	contentBytes, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
 	content := string(contentBytes)
+	block := formatPeersBlock(peers)
 
-	newBlock := "Peers: ["
-	for _, p := range keep {
-		newBlock += fmt.Sprintf("\n  %s", p)
+	startIdx, endIdx, ok := peersBlockBounds(content)
+	if !ok {
+		if content != "" {
+			if !strings.HasSuffix(content, "\n") {
+				content += "\n"
+			}
+			content += "\n"
+		}
+		return os.WriteFile(path, []byte(content+block+"\n"), 0644)
 	}
-	newBlock += "\n  ]\n"
 
-	startIdx := strings.Index(content, "Peers: [")
-	if startIdx != -1 {
-		// Look for properly formatted closing bracket (not IPv6 bracket)
-		closingPattern := "\n  ]"
-		endIdx := strings.Index(content[startIdx:], closingPattern)
-		if endIdx == -1 {
-			closingPattern = "\n]"
-			endIdx = strings.Index(content[startIdx:], closingPattern)
-		}
-		if endIdx != -1 {
-			// Skip past the entire closing pattern including the bracket
-			endIdx = startIdx + endIdx + len(closingPattern)
-			newContent := content[:startIdx] + newBlock + content[endIdx:]
-			os.WriteFile(detectedConfigPath, []byte(newContent), 0644)
-			fmt.Println(green("Peers removed."))
-		}
+	// Keep the content after the block, collapsing extra blank lines that
+	// older versions left behind on every add/remove operation.
+	tail := strings.TrimLeft(content[endIdx:], "\r\n")
+	newContent := content[:startIdx] + block
+	if tail != "" {
+		newContent += "\n\n" + tail
+	} else {
+		newContent += "\n"
 	}
+
+	return os.WriteFile(path, []byte(newContent), 0644)
+}
+
+func formatPeersBlock(peers []string) string {
+	var b strings.Builder
+	b.WriteString("Peers: [")
+	for _, p := range peers {
+		b.WriteString("\n  ")
+		b.WriteString(p)
+	}
+	b.WriteString("\n]")
+	return b.String()
 }
 
 // --- Helpers ---
@@ -784,17 +997,15 @@ func showStatus() {
 	}
 	out, _ := exec.Command(cmdName, "getself").CombinedOutput()
 	fmt.Println(string(out))
-	waitEnter()
+	waitContinue()
 }
 
 func restartServicePrompt() {
-	r := false
-	survey.AskOne(&survey.Confirm{Message: "Restart Yggdrasil service now?"}, &r)
-	if r {
+	if askConfirm("Restart Yggdrasil service now?", true) {
 		if err := currentPlatform.ManageService("Restart"); err != nil {
-			fmt.Println(red("Restart failed: "), err)
+			fmt.Println(red(T("Restart failed: ")), err)
 		} else {
-			fmt.Println(green("Service restarted."))
+			fmt.Println(green(T("Service restarted.")))
 		}
 	}
 }
@@ -912,7 +1123,7 @@ func pingPeerDetailed(uri string) Peer {
 // checkActivePeersStatus displays the current status of all peers from yggdrasilctl
 func checkActivePeersStatus() {
 	clearScreen()
-	fmt.Println(cyan("=== Active Peers Status ===\n"))
+	fmt.Println(cyan(T("=== Active Peers Status ===\n")))
 
 	cmdName := linuxExe
 	if isWindows {
@@ -921,21 +1132,21 @@ func checkActivePeersStatus() {
 
 	out, err := exec.Command(cmdName, "getPeers").CombinedOutput()
 	if err != nil {
-		fmt.Println(red("Error: "), err)
-		fmt.Println(yellow("Make sure Yggdrasil service is running."))
-		waitEnter()
+		fmt.Println(red(T("Error: ")), err)
+		fmt.Println(yellow(T("Make sure Yggdrasil service is running.")))
+		waitContinue()
 		return
 	}
 
 	fmt.Println(string(out))
-	fmt.Println(yellow("\nTip: Use 'Remove Dead Peers' to clean up peers with 'Down' status."))
-	waitEnter()
+	fmt.Println(yellow(T("\nTip: Use 'Remove Dead Peers' to clean up peers with 'Down' status.")))
+	waitContinue()
 }
 
 // removeDeadPeers removes peers that are currently in "Down" state
 func removeDeadPeers() {
 	clearScreen()
-	fmt.Println(cyan("=== Remove Dead Peers ===\n"))
+	fmt.Println(cyan(T("=== Remove Dead Peers ===\n")))
 
 	cmdName := linuxExe
 	if isWindows {
@@ -943,40 +1154,40 @@ func removeDeadPeers() {
 	}
 
 	// Get current peer status from yggdrasilctl
-	fmt.Println("Fetching peer status from Yggdrasil...")
+	fmt.Println(T("Fetching peer status from Yggdrasil..."))
 	out, err := exec.Command(cmdName, "-json", "getPeers").CombinedOutput()
 	if err != nil {
-		fmt.Println(red("Error getting peer status: "), err)
-		fmt.Println(yellow("Make sure Yggdrasil service is running."))
-		waitEnter()
+		fmt.Println(red(T("Error getting peer status: ")), err)
+		fmt.Println(yellow(T("Make sure Yggdrasil service is running.")))
+		waitContinue()
 		return
 	}
 
 	// Parse the JSON response - it's a map with "peers" array
 	var result map[string]interface{}
 	if err := json.Unmarshal(out, &result); err != nil {
-		fmt.Println(red("Error parsing peers data: "), err)
-		waitEnter()
+		fmt.Println(red(T("Error parsing peers data: ")), err)
+		waitContinue()
 		return
 	}
 
 	// Get the peers array
 	peersData, ok := result["peers"].([]interface{})
 	if !ok {
-		fmt.Println(yellow("No peer data found in response."))
-		fmt.Println(yellow("Make sure Yggdrasil service is running and has been started with some peers."))
-		waitEnter()
+		fmt.Println(yellow(T("No peer data found in response.")))
+		fmt.Println(yellow(T("Make sure Yggdrasil service is running and has been started with some peers.")))
+		waitContinue()
 		return
 	}
 
 	if len(peersData) == 0 {
-		fmt.Println(yellow("No active peer connections found."))
-		fmt.Println(yellow("Yggdrasil might still be starting up or no peers are configured."))
-		waitEnter()
+		fmt.Println(yellow(T("No active peer connections found.")))
+		fmt.Println(yellow(T("Yggdrasil might still be starting up or no peers are configured.")))
+		waitContinue()
 		return
 	}
 
-	fmt.Printf("\nFound %d peer connection(s) in Yggdrasil. Analyzing...\n\n", len(peersData))
+	fmt.Print(T("\nFound %d peer connection(s) in Yggdrasil. Analyzing...\n\n", len(peersData)))
 
 	// Parse peer statuses
 	type PeerStatus struct {
@@ -1021,18 +1232,18 @@ func removeDeadPeers() {
 	}
 
 	// Display status
-	fmt.Printf("%s: %d\n", green("Up"), len(upPeers))
-	fmt.Printf("%s: %d\n", red("Down"), len(downPeers))
+	fmt.Println(T("%s: %d", green(T("Up")), len(upPeers)))
+	fmt.Println(T("%s: %d", red(T("Down")), len(downPeers)))
 	fmt.Println()
 
 	if len(downPeers) == 0 {
-		fmt.Println(green("✓ All peers are up! No dead peers to remove."))
-		waitEnter()
+		fmt.Println(green(T("✓ All peers are up! No dead peers to remove.")))
+		waitContinue()
 		return
 	}
 
 	// Show dead peers with errors
-	fmt.Println(red("Dead peers (status: Down):"))
+	fmt.Println(red(T("Dead peers (status: Down):")))
 	for i, peer := range downPeers {
 		fmt.Printf("%d. %s\n", i+1, peer.URI)
 		if peer.LastError != "" {
@@ -1041,7 +1252,7 @@ func removeDeadPeers() {
 			if len(errMsg) > 80 {
 				errMsg = errMsg[:77] + "..."
 			}
-			fmt.Printf("   Error: %s\n", yellow(errMsg))
+			fmt.Print(T("   Error: %s\n", yellow(errMsg)))
 		}
 	}
 	fmt.Println()
@@ -1069,7 +1280,7 @@ func removeDeadPeers() {
 	}
 
 	if len(deadPeersNotInConfig) > 0 {
-		fmt.Println(yellow("Note: Some dead peers are not in config (possibly added temporarily):"))
+		fmt.Println(yellow(T("Note: Some dead peers are not in config (possibly added temporarily):")))
 		for _, uri := range deadPeersNotInConfig {
 			fmt.Printf("  - %s\n", uri)
 		}
@@ -1077,24 +1288,22 @@ func removeDeadPeers() {
 	}
 
 	if len(deadPeersInConfig) == 0 {
-		fmt.Println(yellow("No dead peers found in config to remove."))
-		fmt.Println(yellow("(All dead peers were added temporarily, not via config)"))
-		waitEnter()
+		fmt.Println(yellow(T("No dead peers found in config to remove.")))
+		fmt.Println(yellow(T("(All dead peers were added temporarily, not via config)")))
+		waitContinue()
 		return
 	}
 
 	// Ask for confirmation
-	fmt.Printf("Found %s dead peers in config:\n", red(fmt.Sprintf("%d", len(deadPeersInConfig))))
+	fmt.Println(T("Found %s dead peers in config:", red(fmt.Sprintf("%d", len(deadPeersInConfig)))))
 	for i, uri := range deadPeersInConfig {
 		fmt.Printf("%d. %s\n", i+1, uri)
 	}
 	fmt.Println()
 
-	confirm := false
-	survey.AskOne(&survey.Confirm{Message: "Remove these dead peers from config?"}, &confirm)
-	if confirm {
+	if askConfirm("Remove these dead peers from config?", false) {
 		removePeersFromConfig(deadPeersInConfig)
-		fmt.Println(green("\n✓ Dead peers removed from config."))
+		fmt.Println(green(T("\n✓ Dead peers removed from config.")))
 		restartServicePrompt()
 	}
 }
@@ -1180,9 +1389,64 @@ func fileExists(p string) bool {
 	return !info.IsDir()
 }
 
-func waitEnter() {
-	fmt.Println("\nPress Enter...")
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
+// resolveConfigPath expands a leading "~" and returns an absolute path.
+func resolveConfigPath(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", fmt.Errorf("path is empty")
+	}
+	if path == "~" || strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		if path == "~" {
+			path = home
+		} else {
+			path = filepath.Join(home, path[2:])
+		}
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	if info, err := os.Stat(abs); err == nil && info.IsDir() {
+		return "", fmt.Errorf("%s is a directory", abs)
+	}
+	return abs, nil
+}
+
+// waitContinue blocks until the user presses any key or clicks with the mouse.
+func waitContinue() {
+	fmt.Println()
+	fmt.Println(T("Press any key or click to continue..."))
+
+	reader := newInputReader(true)
+	defer reader.Close()
+
+	for {
+		ev, err := reader.ReadEvent()
+		if err != nil {
+			// Not an interactive terminal: fall back to a plain line read.
+			_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+			return
+		}
+		if ev.mouse == nil && ev.key == terminal.KeyInterrupt {
+			fmt.Println(T("Bye!"))
+			os.Exit(0)
+		}
+		if continueEvent(ev) {
+			return
+		}
+	}
+}
+
+// continueEvent reports whether an input event dismisses the continue prompt.
+func continueEvent(ev inputEvent) bool {
+	if ev.mouse != nil {
+		return ev.mouse.button == mouseLeft
+	}
+	return ev.key != terminal.IgnoreKey
 }
 
 func clearScreen() {
@@ -1202,6 +1466,6 @@ func printBanner() {
 	  \_/ \__, |\__, |______\__,_/___|\__, |
 	       __/ | __/ |                 __/ |
 	      |___/ |___/                 |___/
-	          Configurator v` + version
+	          ` + T("Configurator v") + version
 	fmt.Println(cyan(banner))
 }

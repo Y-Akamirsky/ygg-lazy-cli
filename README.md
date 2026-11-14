@@ -1,15 +1,17 @@
 # YggLazy CLI
 ### Lazy way to configure Yggdrasil Network!
 
-![Version](https://img.shields.io/badge/version-0.1.6-blue) ![License](https://img.shields.io/badge/license-GPL3-orange)
+![Version](https://img.shields.io/badge/version-1.0.0-blue) ![License](https://img.shields.io/badge/license-GPL3-orange)
 
 ![Logo](linux-install/ygglazycli.svg)
 
 ## Features
 
-- 🚀 **Fast peer testing** - Tests 100 peers with 20 concurrent workers
 - 📊 **Advanced metrics** - Latency, jitter, stability scoring
 - 🔧 **Dead peer management** - Automatic detection and removal
+- 📁 **Custom config path** - Use any `yggdrasil.conf` with `--config|-c`
+- 🌐 **Localization** - English and Russian UI with OS locale detection
+- 🖱️ **Mouse support** - Click menu items and scroll lists with the wheel, btop-style
 - 📦 **Easy install/uninstall** - One-command installation with auto-generated uninstaller
 - ℹ️ **Version flags** - `--version` and `--help` support
 
@@ -21,6 +23,12 @@ ygglazy --version
 
 # Run configurator
 sudo ygglazy
+
+# Use a custom config file
+sudo ygglazy --config /path/to/yggdrasil.conf
+
+# Force Russian or English UI
+sudo ygglazy --lang ru
 
 # Get help
 ygglazy --help

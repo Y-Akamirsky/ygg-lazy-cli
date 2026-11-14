@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-
-	"github.com/AlecAivazis/survey/v2"
 )
 
 type FreeBSDPlatform struct{}
@@ -38,51 +36,51 @@ func (p *FreeBSDPlatform) FindConfigPath() string {
 }
 
 func (p *FreeBSDPlatform) Install() error {
-	fmt.Println(cyan("=== FreeBSD Yggdrasil Installation ==="))
-	
-	choice := ""
-	survey.AskOne(&survey.Select{
-		Message: "Installation Method:",
-		Options: []string{"pkg (binary package)", "ports (compile from source)", "Cancel"},
-	}, &choice)
+	fmt.Println(cyan(T("=== FreeBSD Yggdrasil Installation ===")))
 
-	if choice == "Cancel" {
-		return fmt.Errorf("installation cancelled")
+	installMethod, _ := askChoice("Installation Method:", []choice{
+		{key: "pkg (binary package)", label: T("pkg (binary package)")},
+		{key: "ports (compile from source)", label: T("ports (compile from source)")},
+		{key: "Cancel", label: T("Cancel")},
+	}, "", 0)
+
+	if installMethod == "Cancel" || installMethod == "" {
+		return fmt.Errorf("%s", T("installation cancelled"))
 	}
 
-	if choice == "pkg (binary package)" {
-		fmt.Println("Installing via pkg...")
+	if installMethod == "pkg (binary package)" {
+		fmt.Println(T("Installing via pkg..."))
 		cmd := exec.Command("pkg", "install", "-y", "yggdrasil")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("pkg install failed: %v", err)
+			return fmt.Errorf("%s: %v", T("pkg install failed"), err)
 		}
-		fmt.Println(green("Installation complete."))
-		fmt.Println(yellow("Enable service: sysrc yggdrasil_enable=YES"))
-		fmt.Println(yellow("Start service: service yggdrasil start"))
+		fmt.Println(green(T("Installation complete.")))
+		fmt.Println(yellow(T("Enable service: sysrc yggdrasil_enable=YES")))
+		fmt.Println(yellow(T("Start service: service yggdrasil start")))
 		return nil
 	}
 
 	// ports installation
-	fmt.Println("Installing via ports...")
+	fmt.Println(T("Installing via ports..."))
 	portsPath := "/usr/ports/net/yggdrasil"
-	
+
 	// Check if ports tree exists
 	if !fileExists(portsPath) {
-		fmt.Println(yellow("Ports tree not found. Please install it first:"))
+		fmt.Println(yellow(T("Ports tree not found. Please install it first:")))
 		fmt.Println("  portsnap fetch extract")
-		return fmt.Errorf("ports tree not available")
+		return fmt.Errorf("%s", T("ports tree not available"))
 	}
 
 	cmd := exec.Command("make", "-C", portsPath, "install", "clean")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ports install failed: %v", err)
+		return fmt.Errorf("%s: %v", T("ports install failed"), err)
 	}
 
-	fmt.Println(green("Installation complete."))
+	fmt.Println(green(T("Installation complete.")))
 	return nil
 }
 
@@ -101,7 +99,7 @@ func (p *FreeBSDPlatform) ManageService(act string) error {
 	case "Disable Autostart":
 		return exec.Command("sysrc", "yggdrasil_enable=NO").Run()
 	default:
-		return fmt.Errorf("unknown action: %s", act)
+		return fmt.Errorf("%s: %s", T("unknown action"), act)
 	}
 }
 
