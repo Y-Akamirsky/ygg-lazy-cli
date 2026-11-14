@@ -7,7 +7,6 @@
 
 ## Features
 
-- 🚀 **Fast peer testing** - Tests 100 peers with 20 concurrent workers
 - 📊 **Advanced metrics** - Latency, jitter, stability scoring
 - 🔧 **Dead peer management** - Automatic detection and removal
 - 📁 **Custom config path** - Use any `yggdrasil.conf` with `--config|-c`
