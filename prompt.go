@@ -223,16 +223,6 @@ type promptScreen struct {
 	rows   int
 }
 
-func newPromptScreen() *promptScreen {
-	raw := os.Stdout
-	return &promptScreen{
-		out:    terminal.NewAnsiStdout(raw),
-		raw:    raw,
-		cursor: &terminal.Cursor{In: os.Stdin, Out: raw},
-		width:  terminalWidth(),
-	}
-}
-
 // terminalWidth returns the visible terminal width or 0 when it is unknown.
 func terminalWidth() int {
 	width, _, err := term.GetSize(int(os.Stdout.Fd()))
@@ -281,6 +271,17 @@ func physicalRows(text string, width int) int {
 	return rows
 }
 
+// newPromptScreen creates a prompt screen.
+func newPromptScreen() *promptScreen {
+	raw := os.Stdout
+	return &promptScreen{
+		out:    terminal.NewAnsiStdout(raw),
+		raw:    raw,
+		cursor: &terminal.Cursor{In: os.Stdin, Out: raw},
+		width:  terminalWidth(),
+	}
+}
+
 // clear removes the previously drawn prompt block and leaves the cursor at its
 // first line.
 func (s *promptScreen) clear() {
@@ -291,6 +292,9 @@ func (s *promptScreen) clear() {
 	for i := 1; i < s.rows; i++ {
 		_ = s.cursor.PreviousLine(1)
 	}
+	// The cursor sits at the end of the last row, and a one-row block never
+	// moves up, so drop it back to the first column before erasing.
+	_ = s.cursor.HorizontalAbsolute(0)
 	for i := 0; i < s.rows; i++ {
 		_ = terminal.EraseLine(s.raw, terminal.ERASE_LINE_ALL)
 		if i < s.rows-1 {
