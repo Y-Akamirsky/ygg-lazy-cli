@@ -1,5 +1,6 @@
 # Dev notes
 DEVNOTES.md
+TODO.md
 *.swp
 *~
 yggdrasil.conf.schema
@@ -16,3 +17,4 @@ dist/
 .vscode/
 .idea/
 .continueignore
+.ignore
